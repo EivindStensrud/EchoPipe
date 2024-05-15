@@ -1,0 +1,15 @@
+EchoPipe - Reference template database creator"
+
+Arguments used to generate an uncurated reference template.
+The required arguments are -f (--forward), -r (--reverse), -e, -a, and input_file
+'input_file',                    help="Either a text file with a list of species names or a fasta file that is to be converted into the reference template database.
+-f, '--forward',                 help="The forward primer used to find region of interest, (5'-3' orientation)."
+-r, '--reverse',                 help="The reverse primer used to find region of interest, (5'-3' orientation)."
+-e, '--email',                   help="Your email if NCBI needs to reach you."
+-a, '--api_key',                 help="The user's NCBI API key, allows for faster downloads."
+-q, '--query',                   help="The search result will include the user input search term(s). For example: if the user wish to include a term, make sure to put 'AND' followed by the search term. Likewise, in order to exclude a term write instead 'NOT' in front without ''."
+-t, '--threshold', default=150,  help="The minimum length of a sequence, including the primer regions. Any sequence shorter than this is discarded. Default cutoff is set to 150 bases."
+-m, '--max', default=1,          help="The amount of sequences that are downloaded per species that may be increased for greater coverage, but is recommended to always remain single digit. While depending on the computational power, it is suggested to not exceed a total of 500 sequences. Default = 1."
+-p, '--provided_sequences',      help="This flag is used a fasta file is provided as a reference template, rather than downloading own sequences."
+
+-C', '--Complete'                help="Completes the reference template database." 
