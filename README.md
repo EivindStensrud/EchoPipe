@@ -1,7 +1,8 @@
 # EchoPipe
 Tutorial on how to use the EchoPipe script.
 The scripts are command-line based, written in python and uses conda.
-Every 
+
+Read Example on how to run the script.
 
 # Dependencies and installation
 The script requires miniconda, and is per now only tested on ubuntu.
