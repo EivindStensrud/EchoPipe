@@ -1,0 +1,15 @@
+name: EchoPipe
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11.7
+  - blast
+  - fasttree
+  - ete3
+  - bioconda::mafft
+  - biopython
+  - tqdm
+  - pandas
+prefix: /home/eivisten/miniconda3/envs/EchoPipe
