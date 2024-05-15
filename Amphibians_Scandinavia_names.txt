@@ -1,0 +1,14 @@
+Bombina bombina
+Bufo bufo
+Bufotes variabilis
+Epidalea calamita
+Hyla arborea
+Lissotriton vulgaris
+Lithobates catesbeianus
+Pelobates fuscus
+Pelophylax lessonae
+Rana arvalis
+Rana dalmatina
+Rana temporaria
+Triturus alpestris
+Triturus cristatus
