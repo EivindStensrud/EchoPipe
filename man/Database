@@ -1,0 +1,21 @@
+EchoPipe - Database creation
+  A tool to create, evaluate metabarcoding reference datebase
+  Version 1.0
+
+Arguments used to generate a uncurated reference database
+The required arguments are input_file, input_database, -e (--email), -a (--api_key)
+
+'input_file',                      help="A txt file or CSV with a list of species names."
+'input_database',                  help="The path to the input reference database fasta file."
+-e, '--email', default=NA,         help="The user's email address associated with the NCBI API key."
+-a, '--api_key', default=NA,       help="The user's NCBI API key."
+-s, '--sort',                      help="Sort by length, targets longer sequences."
+-c, '--maxcount', default=10000,   help="The maximum number of accession numbers downloaded per species, default = 10 000."
+-l, '--maxlength', default=22000,  help="The longest allowed sequence length for an accession number to be analysed, default = 22 000, which targets mitochondrial sequences."
+-z, '--ampliconsize', default=50,  help="The minimum size an amplicon may in order to not be rejected. Consider adjusting this based on the marker region. Default = 50."
+-m, '--mitochondria',              help="The search targets mitochondrial sequences."
+-r, '--ribosomal',                 help="The search targets 12S ribosomal DNA sequences."
+-q, '--query',                     help="The search result will include the user input search term(s). Example, limit the search to 12s region: -q "AND 12s" followed by the search term. To exclude a term write  "NOT 12s"."
+-b, '--batch_size', default=5000,  help="The amount of sequences that can be downloaded simultaneously, default = 5000. Only need to consider using this with values lower than the default and only use it in conjunction with --maxlength and expecting to download very large sequences (size of chromosomes)."
+-t, '--taxid', default="",         help="The last saved taxid list is used, which saves time. Only use if the same input from that run is wanted!"
+-R, '--repeat', default="",        help="No new sequences are downloaded. Instead, all previously downloaded sequences are BLASTed against the input database. Note: this options resets the file containing analysed accession numbers and the output will be curated from the start."
