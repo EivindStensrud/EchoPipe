@@ -34,8 +34,8 @@ import argparse # Allows the program to be run from the command line.
 ###
 ###
 
-default_email = "ninja_skutt@hotmail.com" # Input by the user! Your email of choice when using Biopython.
-default_API_key = "86856fd70b62350246a86289c63698621607" # Input by the user! Need to have an account at NCBI.
+default_email = "mail@email.com" # Input by the user! Your email of choice when using Biopython.
+default_API_key = "123456789abcdefghij" # Input by the user! Need to have an account at NCBI.
 
 ###
 ### argparse stuff
