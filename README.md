@@ -13,8 +13,6 @@ For guidance of how to use the script, follow the Example, or read the manual.
 
 
 
-Read Example on how to run the script.
-
 # Dependencies and installation
 The script requires miniconda, and works on both Ubuntu (WSL) and OS.
 
