@@ -2,6 +2,14 @@
 Tutorial on how to use the EchoPipe script.
 The scripts are command-line based, written in python and uses conda.
 
+## Flowchart of the workflow of EchoPipe:
+
+
+![Workflow_echopipe](https://github.com/EivindStensrud/EchoPipe/assets/83813403/38a5069a-74d8-4930-a264-d8d87779fcb1)
+
+
+
+
 Read Example on how to run the script.
 
 # Dependencies and installation
