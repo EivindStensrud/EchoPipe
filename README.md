@@ -8,7 +8,7 @@ For guidance of how to use the script, follow the Example, or read the manual.
 ## Flowchart of the workflow of EchoPipe:
 
 
-![Workflow_echopipe](https://github.com/EivindStensrud/EchoPipe/assets/83813403/38a5069a-74d8-4930-a264-d8d87779fcb1)
+![Workflow_echopipe](https://github.com/EivindStensrud/EchoPipe/assets/83813403/e4a0ca27-31a7-48c9-95ab-b05cfbc6d086)
 
 
 
