@@ -1,6 +1,9 @@
 # EchoPipe
 Tutorial on how to use the EchoPipe script.
 The scripts are command-line based, written in python and uses conda.
+Conda environment, and installations are found below.
+
+For guidance of how to use the script, follow the Example, or read the manual.
 
 ## Flowchart of the workflow of EchoPipe:
 
@@ -13,14 +16,14 @@ The scripts are command-line based, written in python and uses conda.
 Read Example on how to run the script.
 
 # Dependencies and installation
-The script requires miniconda, and is per now only tested on ubuntu.
+The script requires miniconda, and works on both Ubuntu (WSL) and OS.
 
 Miniconda
 https://docs.anaconda.com/free/miniconda/index.html
 
 conda install conda=24.3.0
 
-## Ubuntu
+## Ubuntu (WSL)
 Download the miniconda environment EchoPipe, environment.yml, following instruction underneath.
 
 ```
