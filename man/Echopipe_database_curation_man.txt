@@ -1,0 +1,8 @@
+EchoPipe - Database curation
+  A tool for curating reference databases by creating phylogenetic trees to be reviewed
+  Version 1.0
+
+Arguments used to curate reference databases.
+The required arguments are input_file and -o (--old_database).
+'input_file',            help="The database that is to be reviewed. Expects a .fasta file from BLAST_results/.".
+-o, '--old_database',    help="The most recent database that is to be updated in this iteration. Note: The reference template database is not intended for this."
