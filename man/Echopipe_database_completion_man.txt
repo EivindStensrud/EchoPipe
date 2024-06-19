@@ -1,0 +1,9 @@
+EchoPipe - Database completion
+  A script for updating the current database with new content
+  Version 1.0
+
+Arguments used to generate an uncurated reference template.
+The required arguments are new_content, updated_database, and -o (--old_database).
+'new_content',         help="The path to the file with new content for the database."
+'updated_database',    help="The name of the new, updated database."
+-o, '--old_database',  help="The path to the old, existing database. Note: The reference template database is not intended for this."
