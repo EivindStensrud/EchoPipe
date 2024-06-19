@@ -1,0 +1,15 @@
+EchoPipe - Reformat
+        Reformats the input database to a pre-defined format:
+        sintax = SINTAX
+        rdp = Ribosomal Database Project (RDP)
+        dadt = DADA2 assignTaxonomy
+        dads = DADA2 assignSpecies
+        idt = IDTAXA
+        qiime = QIIME
+
+  Version 1.0
+
+Arguments used to reformat database
+The required arguments are 'reference_database' and 'format'
+'reference_database',    help="The reference database for which the header format will be changed."
+'format',                help="choices=['sintax', 'rdp', 'dadt', 'dads', 'idt', 'qiime'], Write in one of the available formats as seen above"
