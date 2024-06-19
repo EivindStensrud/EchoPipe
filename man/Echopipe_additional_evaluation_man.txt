@@ -1,0 +1,8 @@
+EchoPipe - EchoPipe - Additional evaluation
+  Provides three dataframes from the reference database
+  Version 1.0
+
+Arguments used to generate additional output of evaluation steps
+The required arguments are 'reference_database', -r (--reverse), -e (--email), -a (--api_key), and input_file
+'reference_database',    help="The path to the reference database that the dataframes are going to be based on."
+'monophyletic_group',    help="The path to the text file containing the monophyletic groups that was generated when the reference database was completed."   
