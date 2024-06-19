@@ -44,7 +44,7 @@ group_1.add_argument('-q', '--query',
 group_1.add_argument('-t', '--threshold', type=int, default=150,
     help="The minimum length of a sequence, including the primer regions. Any sequence shorter than this is discarded. Default cutoff is set to 150 bases.")
 group_1.add_argument('-l', '--length', type=int, default=22000,
-    help="The longest allowed sequence length for template creation. WARNING: The longer the sequence the more computationl power is required to align the sequences.")
+    help="The longest allowed sequence length for template creation. WARNING: The longer the sequence the more computational power is required to align the sequences.")
 group_1.add_argument('-m', '--max', type=int, default=1,
     help="The number of sequences that are downloaded per species. Incresing the number may increase the coverage, while increasing the computational power. The total number of downloaded sequences is recommended to not exceed 500. Default = 1.")
 group_1.add_argument('-p', '--provided_sequences', action='store_true', default="",
