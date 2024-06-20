@@ -19,7 +19,9 @@ The script requires miniconda, and works on both Ubuntu (WSL) and OS.
 Miniconda
 https://docs.anaconda.com/free/miniconda/index.html
 
+```
 conda install conda=24.3.0
+```
 
 ## Ubuntu (WSL)
 Download the miniconda environment EchoPipe, environment.yml, following instruction underneath.
