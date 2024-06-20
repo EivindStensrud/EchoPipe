@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(
 
 group_1 = parser.add_argument_group("Arguments used to generate an uncurated reference template.\nThe required arguments are input_file, -f (--forward), -r (--reverse), -e (--email) and -a (--api_key)")
 group_1.add_argument('input_file', type=str, nargs='?',
-    help="A txt file or CSV with a list of species names or a fasta file that is to be converted into the reference template database (-p is then required).")
+    help="A TXT file or CSV with a list of species names or a fasta file that is to be converted into the reference template database (-p is then required).")
 group_1.add_argument('-f', '--forward',
     help="The forward primer used to find region of interest, (5'-3' orientation).")
 group_1.add_argument('-r', '--reverse',
@@ -157,8 +157,12 @@ if not args.Complete:
                                 break
                             except HTTPError as e:
                                 print(f"An error occurred:\n{e}")
+                                error_message = e.read().decode()
+                                print(error_message + "\n")
                             except Exception as e:
                                 print(f"An error occurred:\n{e}")
+                                error_message = e.read().decode()
+                                print(error_message + "\n")
 
                 if list_of_not_found:
                     with open("no_search_results.txt", "w") as file:
@@ -302,5 +306,4 @@ else: # This step is triggered with -C, --Complete. It removes the primer sequen
                 file.write(f">{record.description}\n")
                 file.write(f"{str(record.seq.replace('-', ''))}\n")
 
-    print("reference_template_database.fasta has been created and ready for use with ECHoPipe_db_creation.py")
-
+    print("reference_template_database.fasta has been created and ready for use with Echopipe_database_creation.py")

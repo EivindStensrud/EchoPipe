@@ -100,7 +100,7 @@ reuse_sequences = args.repeat
 DATE = datetime.today().strftime('%Y-%m-%d')
 i = 1
 run_name = f"{DATE}_{i}"
-search_settings = '[Organism] AND biomol_genomic[PROP] ' + max_length + mitochondria_on + ribosomal_on + custom_query # Baseline and complimentary search terms. Can, for example, filter away all non-annotated mitochondrial sequences.
+search_settings = '[Organism] AND biomol_genomic[PROP]' + max_length + mitochondria_on + ribosomal_on + custom_query # Baseline and complimentary search terms. Can, for example, filter away all non-annotated mitochondrial sequences.
 
 program_timer = time.time()
 
