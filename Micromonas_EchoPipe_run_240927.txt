@@ -1,5 +1,8 @@
 #Micromonas EchoPipe run
 
+wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/main/environment.yml
+conda env create -f environment.yml
+
 conda activate EchoPipe 
 
 RAWDIR=/home/eivisten/eDNA/Database/EchoPipe_Official/240927_PR2
