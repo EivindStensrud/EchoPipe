@@ -1,0 +1,28 @@
+#Micromonas EchoPipe run
+
+conda activate EchoPipe 
+
+RAWDIR=/home/eivisten/eDNA/Database/EchoPipe_Official/240927_PR2
+cd $RAWDIR
+
+#primers Piredda et al 2017
+python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -r ACTTTCGTTCTTGATYRATGA -l 35000 -e eivisten@uio.no -t 200 -m 100 -a 86856fd70b62350246a86289c63698621607 micromonas_species_list.txt
+
+cd $RAWDIR/Reference_template_creation
+
+#Visualized the reference templace in Jalview, deleted the one from wrong marker region.
+
+cd $RAWDIR
+
+python Echopipe_reference_template_database_creator.py -C 
+
+python Echopipe_database_creation.py micromonas_species_list.txt reference_template_database.fasta -e eivisten@uio.no -a 86856fd70b62350246a86289c63698621607
+
+
+python Echopipe_database_curation.py BLAST_results/2024-09-27_1_to_curate.fasta
+
+#create the official database, give an official name, this case. Micromonas_24_09_27.fasta
+
+python Echopipe_database_completion.py BLAST_results/2024-09-27_1_to_curate.fasta Micromas_24_09_27.fasta
+
+python Echopipe_additional_evaluation.py Micromas_24_09_27.fasta Database_curation/2024-09-27_1/Curated_content/2024-09-27_1_post_curation_monophyletic_group.txt

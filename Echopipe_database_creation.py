@@ -45,9 +45,9 @@ group_1.add_argument('input_file', type=str,
     help="A txt file or CSV with a list of species names.")
 group_1.add_argument('input_database', type=str,
     help="The path to the input reference database fasta file.")
-group_1.add_argument('-e', '--email', type=str, default=None,
+group_1.add_argument('-e', '--email', type=str, default="eivisten@uio.no",
     help="The user's email address associated with the NCBI API key.")
-group_1.add_argument('-a', '--api_key', type=str, default=None,
+group_1.add_argument('-a', '--api_key', type=str, default="5538bd02e0d704e3416263ad4d51c74b7608",
     help="The user's NCBI API key.")
 group_1.add_argument('-s', '--sort', action="store_true",
     help="Sort by length, targets longer sequences.")
@@ -241,6 +241,7 @@ logs = "Log_files/" # Directory where files containing information from the sear
 log_file = f"{logs}{run_name}_log.txt" # Log file where both completed and ongoing progress is stored.
 
 taxid_collection = "taxid_collection.txt" # Species' unique taxids are stored here and used for retrieving data.
+taxid_log_file = f"{logs}{run_name}_{taxid_collection}" # A copy of the taxid_collection.txt file that is either re-used or created. This file, however, is placed in Log_files/.
 error_collection = f"{logs}species_not_found.txt" # If a species is not found from input_species, it will be listed here.
 duplicate_collection = f"{logs}duplicate_species_entries.txt" # If there are duplicate entries of the same species in input_species, it will be listed here (this is based on taxid, so species with more than one name may be detected).
 
@@ -279,6 +280,7 @@ with open(log_file, "w") as file:
         file.write(
             f"Sorted by largest sequence lengths: {args.sort}\n"
             f"Maximum accession number per species: {args.maxcount}\n"
+            f"Minimum amplicon size: {args.ampliconsize}\n"
             f"Search term: {search_settings}\n\n"
             "--------------------------------------------------------------------------\n\n")
     else: # I.e., if reuse_sequences is True.
@@ -420,12 +422,12 @@ if not use_old_taxid: # Skips this step if the user decided to go with the previ
 
 
     if species_not_found:
-        species_not_found.insert(0, f"The follwing species had no search results with the search terms used from the run {run_name}.\n\n")
+        species_not_found.insert(0, f"The following species had no taxonomic search results with the input species list used on the run {run_name}.\n\n")
     write_lines_from_list(species_not_found, error_collection, log_file, # Calls the function write_lines_from_list with additional parameters that ensures a message is printed and appended to the log.
         f"Non-valid species name found. See {error_collection}\n") # This is the message that gets written to log_file.
 
     if duplicate_species:
-        duplicate_species.insert(0, f"The follwing species were duplicates from the input species list from the run {run_name}.\n\n")
+        duplicate_species.insert(0, f"The following species were duplicates from the input species list from the run {run_name}.\n\n")
     write_lines_from_list(duplicate_species, duplicate_collection, log_file,
         f"Duplicate species name found. See {duplicate_collection}\n") # This is the message that gets written to log_file.
 
@@ -443,6 +445,7 @@ else:
 
 with open(taxid_collection, "r") as file: # Opens taxid_collection in read mode.
     species_list = file.readlines() # Stores the content as species_list.
+write_lines_from_list(species_list, taxid_log_file) # Creates an identical file from the content in taxid_collection, however, at a different location for logging purposes.
 species_list = sorted([line.strip().split("; ")[2].replace(' ', '_') for line in species_list]) # species_list is slightly redefined. Index nr 2 [2] after splitting the "; ", which is the scientific name retrieved from NCBI, is formated as Homo_sapiens.
 
 if not reuse_sequences:
@@ -861,5 +864,17 @@ append_and_print_message(log_file,
     f"\n\n\nIt took {program_duration} seconds from start to finish.\n"
     f"The program finished at {end_timestamp}.\n")
 
-database_curation = "Database_curation/"
+database_curation = f"Database_curation/{run_name}/"
 create_directory(database_curation) # Creates a directory for files related to database curation if it does not already exist.
+error_collection_date = f"{database_curation}{run_name}_species_not_found.txt"
+duplicate_collection_date = f"{database_curation}{run_name}_duplicate_species_entries.txt"
+
+# Makes a copy of which species were not found in NCBI's taxonomic database and which ones it recognized as duplicate entries. These copies are put in Database_curation/{run_name}/
+with open(error_collection, "r") as outfile:
+    with open(error_collection_date, "w") as infile:
+        for line in outfile:
+            infile.writelines(line)
+with open(duplicate_collection, "r") as outfile:
+    with open(duplicate_collection_date, "w") as infile:
+        for line in outfile:
+            infile.writelines(line)

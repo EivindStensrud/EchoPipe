@@ -18,6 +18,7 @@ from urllib.error import HTTPError
 import time
 import os
 import argparse
+import statistics
 
 ###
 ###
@@ -35,20 +36,22 @@ group_1.add_argument('-f', '--forward',
     help="The forward primer used to find region of interest, (5'-3' orientation).")
 group_1.add_argument('-r', '--reverse',
     help="The reverse primer used to find region of interest, (5'-3' orientation).")
-group_1.add_argument('-e', '--email', type=str, default=None,
+group_1.add_argument('-e', '--email', type=str, default="eivisten@uio.no",
     help="Your email if NCBI needs to contact you.")
-group_1.add_argument('-a', '--api_key', type=str, default=None,
+group_1.add_argument('-a', '--api_key', type=str, default="5538bd02e0d704e3416263ad4d51c74b7608",
     help="The user's NCBI API key, allows for faster downloads.")
 group_1.add_argument('-q', '--query',
     help='The search result will include the user input search term(s). Example, limit the search to 12s region: -q "AND 12s" followed by the search term. To exclude a term write  "NOT 12s".')
 group_1.add_argument('-t', '--threshold', type=int, default=150,
     help="The minimum length of a sequence, including the primer regions. Any sequence shorter than this is discarded. Default cutoff is set to 150 bases.")
 group_1.add_argument('-l', '--length', type=int, default=22000,
-    help="The longest allowed sequence length for template creation. WARNING: The longer the sequence the more computational power is required to align the sequences.")
+    help="The longest allowed sequence length for template creation Default is set to 20 000. WARNING: The longer the sequence the more computational power is required to align the sequences.")
 group_1.add_argument('-m', '--max', type=int, default=1,
     help="The number of sequences that are downloaded per species. Incresing the number may increase the coverage, while increasing the computational power. The total number of downloaded sequences is recommended to not exceed 500. Default = 1.")
 group_1.add_argument('-p', '--provided_sequences', action='store_true', default="",
     help="Use if a fasta file is provided to be used as a reference template.")
+group_1.add_argument('-z', '--longest_amplicon_size', type=float, default=2,
+    help="Advanced setting. A value that is multiplied with the median length of the downloaded and trimmed sequences in order to discard sequences that are abnormally long despite the trimming process. Can be used if a more narrow range of sequence size is expected, or if it is expected to be much broader than the median. Default is set to 2*median length.")
 
 group_2 = parser.add_argument_group("Argument used to finish the curated reference template database.")
 group_2.add_argument('-C', '--Complete', action="store_true",
@@ -70,6 +73,7 @@ if not args.Complete:
         Entrez.api_key = args.api_key
         custom_query = f'{args.query}' if args.query else " "
         length_threshold = args.threshold
+        longest_amplicon_size = args.longest_amplicon_size
         max_length = args.length
         retmax = args.max
         skip_download = args.provided_sequences
@@ -90,7 +94,8 @@ if not args.Complete:
                     f"Input file: {args.input_file}\n"
                     f"Forward primer: 5'-{args.forward}-3'\n"
                     f"Reverse primer: 5'-{args.reverse}-3'\n"
-                    f"Minimum sequence length: {args.threshold}\n")
+                    f"Minimum sequence length: {args.threshold}\n"
+                    f'Maximum amplicon cut off multiplier: {args.longest_amplicon_size}\n')
                 if not skip_download:
                     file.write(
                         f"Email address: {args.email}\n"
@@ -173,14 +178,37 @@ if not args.Complete:
             ###
             ###
 
+            # Function to make batch_sizes dynamic, so that the size may be a bit more evenly distributed.
+            def calculate_batches(total_records, min_size, max_size):
+                # Calculate the minimum number of batches with the maximum batch size.
+                num_batches = (total_records + max_size - 1) // max_size
+                
+                # Try to distribute the records as evenly as possible.
+                base_size = total_records // num_batches
+                remainder = total_records % num_batches # % = modulus.
+                
+                # Adjust the base_size and distribute the remainder.
+                if base_size < min_size:
+                    base_size = min_size
+                    num_batches = (total_records + base_size - 1) // base_size
+                    remainder = total_records % num_batches
+
+                batch_sizes = [base_size] * num_batches
+                for i in range(remainder):
+                    batch_sizes[i] += 1
+
+                return batch_sizes
+
+
             # Function to find the position of the first base in the forward primer.
             def find_5_end_fwd_position(aligned_seq):
-                position_5_end_fwd = 1
+                position_5_end_fwd = 0
                 for char in aligned_seq:
                     if char != "-":
                         return position_5_end_fwd
                     position_5_end_fwd += 1
                 return None
+
 
             # Function to find the position of the last occurring base in the reverse primer.
             def find_5_end_rev_position(aligned_seq):
@@ -198,23 +226,28 @@ if not args.Complete:
             mafft_input_file = input_file if skip_download else ncbi_output_file
             output_prefix = "temp_split_file"
 
-            batch_size = 40
+            min_batch_size = 35
+            max_batch_size = 45
 
             records = list(SeqIO.parse(mafft_input_file, "fasta"))
-            num_batches = (len(records) + batch_size - 1) // batch_size
+            total_records = len(records)
+            batch_sizes = calculate_batches(total_records, min_batch_size, max_batch_size)
+            num_batches = len(batch_sizes)
 
-            for i in range(num_batches):
-                start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, len(records))
+            start_idx = 0
+            for i, batch_size in enumerate(batch_sizes):
+                end_idx = start_idx + batch_size
                 output_file = f"{output_prefix}_{i + 1}.fasta"
                 with open(output_file, "w") as file:
                     SeqIO.write(records[start_idx:end_idx], file, "fasta")
                     file.write(f">Forward_primer\n{forward_primer}\n")
                     file.write(f">Reverse_primer\n{reverse_primer}\n")
+                start_idx = end_idx
 
 
             input_prefix = "temp_split_file_"
             maffted_file = "aligned_sequences.fasta"
+            second_maffted_file = "filtered_aligned_sequences.fasta"
 
             not_accepted_sequences = []
 
@@ -249,12 +282,14 @@ if not args.Complete:
                                     start_pos_forward = find_5_end_fwd_position(aligned_seq)
                                 elif record.id == "Reverse_primer":
                                     end_pos_reverse = find_5_end_rev_position(aligned_seq)
+
                             fasta_string.seek(0) # The string must be "reset" in order for it to be usable again.
                             for seq_record in SeqIO.parse(fasta_string, "fasta"):
+                                fixed_sequence_length = len(seq_record.seq[start_pos_forward:end_pos_reverse].replace("-", ""))
                                 if seq_record.id == "Forward_primer" or seq_record.id == "Reverse_primer":
                                     trimmed_and_filtered_sequences.append(f">{str(seq_record.description)}\n")
                                     trimmed_and_filtered_sequences.append(str(seq_record.seq.replace("-", "")) + "\n")
-                                elif len(seq_record.seq[start_pos_forward:end_pos_reverse].replace("-", "")) > length_threshold:
+                                elif fixed_sequence_length > length_threshold:
                                     trimmed_and_filtered_sequences.append(f">{str(seq_record.description)}\n")
                                     trimmed_and_filtered_sequences.append(str(seq_record.seq[start_pos_forward:end_pos_reverse].replace("-", "")) + "\n")
                                 else:
@@ -275,9 +310,46 @@ if not args.Complete:
                                 print(f"Maximum retry attempts reached. Skipping batch {i + 1}.")
                                 break
 
+            with open(second_maffted_file, "w") as file:
+                mafft_cline = MafftCommandline(
+                    input=maffted_file
+                )
+                stdout, stderr = mafft_cline()
+
+                sequence_lengths = []
+                second_trimmed_and_filtered_sequences = []
+                second_fasta_string = StringIO(stdout)
+
+                second_alignment = AlignIO.read(second_fasta_string, "fasta")
+                for second_record in second_alignment:
+                    second_aligned_seq = str(second_record.seq)
+                    if second_record.id == "Forward_primer":
+                        second_start_pos_forward = find_5_end_fwd_position(second_aligned_seq)
+                    elif second_record.id == "Reverse_primer":
+                        second_end_pos_reverse = find_5_end_rev_position(second_aligned_seq)
+                    else:
+                        sequence_length = len(second_aligned_seq.replace("-", ""))
+                        sequence_lengths.append(sequence_length)
+
+                median_length = statistics.median(sequence_lengths)
+
+                second_fasta_string.seek(0)
+                for second_seq_record in SeqIO.parse(second_fasta_string, "fasta"):
+                    fixed_sequence_length = len(second_seq_record.seq[second_start_pos_forward:second_end_pos_reverse].replace("-", ""))
+                    if second_seq_record.id == "Forward_primer" or second_seq_record.id == "Reverse_primer":
+                        file.write(f">{str(second_seq_record.description)}\n")
+                        file.write(str(second_seq_record.seq.replace("-", "")) + "\n")
+                    elif fixed_sequence_length > length_threshold and fixed_sequence_length <= longest_amplicon_size*median_length:
+                        file.write(f">{str(second_seq_record.description)}\n")
+                        file.write(str(second_seq_record.seq[second_start_pos_forward:second_end_pos_reverse].replace("-", "")) + "\n")
+                    else:
+                        not_accepted_sequences.append(second_seq_record.description)
+
+            os.remove(maffted_file)
+
             with open(to_be_curated, "w") as file:
                 mafft_cline = MafftCommandline(
-                    input=maffted_file,
+                    input=second_maffted_file,
                     localpair=True,
                     maxiterate=1000,
                     reorder=True
