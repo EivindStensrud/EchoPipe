@@ -25,7 +25,8 @@ cd $RAWDIR/Reference_template_creation
 ```
 
 Inspect aligned_sequences_to_curate.fasta, located in $RAWDIR/Reference_template_creation. Visualize in MSA-tool, ex. Jalview. 
-Remove dubious or wrongly annotated sequences from the aligned_sequences_to_curate.fasta file.
+Remove clear dubious or wrongly annotated sequences from the aligned_sequences_to_curate.fasta file. The most important is that sequences from only the correct marker region is included.
+Save the file with the same name, aligned_sequences_to_curate.fasta.
 
 Create an official reference_template_database.fasta, which will be used to find similiar sequences from NCBI.
 ```
