@@ -24,7 +24,7 @@ conda install conda=24.5.0
 ```
 
 ## Ubuntu (WSL)
-Download the miniconda environment EchoPipe, environment.yml, following instruction underneath.
+Download the miniconda environment EchoPipe, environment_240930.yml, following instruction underneath.
 
 ```
 wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/main/environment.yml
