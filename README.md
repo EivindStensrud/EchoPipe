@@ -45,3 +45,7 @@ conda env create -f environment_OS.yml
 conda activate EchoPipe
 
 ```
+
+# Using EchoPipe
+Follow the tutorial.
+
