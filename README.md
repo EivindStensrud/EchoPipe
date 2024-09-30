@@ -27,7 +27,7 @@ conda install conda=24.5.0
 Download the miniconda environment EchoPipe, environment_240930.yml, following instruction underneath.
 
 ```
-wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/main/environment.yml
+wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/refs/heads/main/environment_240930.yml
 conda env create -f environment_240930.yml
 
 conda activate EchoPipe
