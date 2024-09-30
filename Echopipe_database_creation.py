@@ -211,7 +211,7 @@ def loop_finished(check_for_fail, log_file, type_of_download):
 
 # Writes lines from a list to a file.
 def write_lines_from_list(list_with_lines, lines_to_file_path, log_file=None, msg=None): # log_file=None and msg=None makes these optional arguments.
-    if list_with_lines: # First checks if the list has any content. Otherwise an empty file would be created.
+    #if list_with_lines: # First checks if the list has any content. Otherwise an empty file would be created.
         with open(lines_to_file_path, "w") as file: # Opens the file in write-mode.
             for line in list_with_lines:
                 file.writelines(line) # Writes all of the lines from the list on to the file.

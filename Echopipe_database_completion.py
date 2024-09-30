@@ -364,19 +364,17 @@ for species_name, species_leaves in species_leaves_dict.items():
         table_data['Family'].append(family)
         table_data['Is Monophyletic'].append(is_monophyletic_result)
 
-if monophyletic_species:
-    monophyletic_species = sorted(monophyletic_species)
-    monophyletic_species.insert(0, "These species came out as monophyletic in the gene tree after curation.\n\n")
-    with open(f"{run_name}_post_curation_monophyletic_group.txt", "w") as file: # This creates a text file of monophyletic entries.
-        for mono in monophyletic_species:
-            file.write(f"{mono.replace('_', ' ')}\n")
+monophyletic_species = sorted(monophyletic_species)
+monophyletic_species.insert(0, "These species came out as monophyletic in the gene tree after curation.\n\n")
+with open(f"{run_name}_post_curation_monophyletic_group.txt", "w") as file: # This creates a text file of monophyletic entries.
+    for mono in monophyletic_species:
+        file.write(f"{mono.replace('_', ' ')}\n")
 
-if paraphyletic_species:
-    paraphyletic_species = sorted(paraphyletic_species)
-    paraphyletic_species.insert(0, "These species came out as paraphyletic in the gene tree after curation.\n\n")
-    with open(f"{run_name}_post_curation_paraphyletic_group.txt", "w") as file: # This creates a text file of paraphyletic entries.
-        for para in paraphyletic_species:
-            file.write(f"{para.replace('_', ' ')}\n")
+paraphyletic_species = sorted(paraphyletic_species)
+paraphyletic_species.insert(0, "These species came out as paraphyletic in the gene tree after curation.\n\n")
+with open(f"{run_name}_post_curation_paraphyletic_group.txt", "w") as file: # This creates a text file of paraphyletic entries.
+    for para in paraphyletic_species:
+        file.write(f"{para.replace('_', ' ')}\n")
 
 os.remove(temp_file)
 
