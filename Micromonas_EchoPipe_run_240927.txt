@@ -13,7 +13,8 @@ python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -
 
 cd $RAWDIR/Reference_template_creation
 
-#Visualized the reference templace in Jalview, deleted the one from wrong marker region.
+#Visualized the reference templace in Jalview, deleted sequences from wrong marker region, primers may be left in.
+Don't change the name of the file.
 
 cd $RAWDIR
 
