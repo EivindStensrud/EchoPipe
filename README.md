@@ -47,5 +47,6 @@ conda activate EchoPipe
 ```
 
 # Using EchoPipe
-Follow the tutorial.
+Follow the example of Micromonas.
+https://github.com/EivindStensrud/EchoPipe/blob/main/Micromonas_EchoPipe_run_240927.md
 
