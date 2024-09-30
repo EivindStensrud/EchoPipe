@@ -20,7 +20,7 @@ Miniconda
 https://docs.anaconda.com/free/miniconda/index.html
 
 ```
-conda install conda=24.3.0
+conda install conda=24.5.0
 ```
 
 ## Ubuntu (WSL)
