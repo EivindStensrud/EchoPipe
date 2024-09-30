@@ -28,7 +28,7 @@ Download the miniconda environment EchoPipe, environment.yml, following instruct
 
 ```
 wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/main/environment.yml
-conda env create -f environment.yml
+conda env create -f environment_240930.yml
 
 conda activate EchoPipe
 
