@@ -18,13 +18,13 @@ conda activate EchoPipe
 ```
 
 ## Create an initial reference database, required input are:
-Primer pairs, -f (forward) and -r (reverse) primer sequence. 
--l, Maximum length of amplicon retrived from NCBI,
--t, minimum lengths of a sequences retrieved.
--m, maximum number of sequences per species retrieved.
--a, api.key from NCBI
--e, email address for NCBI to contact you
-species list
+Primer pairs, -f (forward) and -r (reverse) primer sequence.  
+-l, Maximum length of amplicon retrived from NCBI.  
+-t, minimum lengths of a sequences retrieved.  
+-m, maximum number of sequences per species retrieved.  
+-a, api.key from NCBI.  
+-e, email address for NCBI to contact you.  
+species list  
 
 ```
 python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -r ACTTTCGTTCTTGATYRATGA -l 35000 -e eivisten@uio.no -t 200 -m 100 -a 86856fd70b62350246a86289c63698621607 micromonas_species_list.txt
