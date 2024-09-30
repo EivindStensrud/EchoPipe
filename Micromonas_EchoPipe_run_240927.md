@@ -28,8 +28,9 @@ species list
 
 ```
 python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -r ACTTTCGTTCTTGATYRATGA -l 35000 -e eivisten@uio.no -t 200 -m 100 -a 86856fd70b62350246a86289c63698621607 micromonas_species_list.txt
-```
 cd $RAWDIR/Reference_template_creation
+
+```
 
 Inspect aligned_sequences_to_curate.fasta, located in $RAWDIR/Reference_template_creation. Visualize in MSA-tool, ex. Jalview. 
 Remove clear dubious or wrongly annotated sequences from the aligned_sequences_to_curate.fasta file. The most important is that sequences from only the correct marker region is included.
