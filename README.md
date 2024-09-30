@@ -39,8 +39,8 @@ conda activate EchoPipe
 Download the miniconda environment EchoPipe, environment_OS.yml, following instruction underneath for Ubuntu.
 
 ```
-wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/main/environment_OS.yml
-conda env create -f environment_OS.yml
+wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/refs/heads/main/environment_240930_OS.yml
+conda env create -f environment_240930_OS.yml
 
 conda activate EchoPipe
 
