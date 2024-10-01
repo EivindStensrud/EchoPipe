@@ -57,7 +57,7 @@ python Echopipe_database_creation.py micromonas_species_list.txt reference_templ
 Required input file is then the old version of the database, and the species name. Increase the search by altering the -c or -l.
 
 ```
-python Echopipe_database_creation.py micromonas_species_list.txt amphibase_240514.fasta -e your.email -a your.NCBIApiKey -c 20000
+python Echopipe_database_creation.py micromonas_species_list.txt Micromas_24_09_30.fasta -e your.email -a your.NCBIApiKey -c 20000
 ```
 
 ## Curate database
