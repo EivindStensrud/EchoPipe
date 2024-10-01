@@ -48,5 +48,5 @@ conda activate EchoPipe
 
 # Using EchoPipe
 Follow the example of Micromonas.
-https://github.com/EivindStensrud/EchoPipe/blob/main/Micromonas_EchoPipe_run_240927.md
-
+[Micromonas_example/Micromonas_EchoPipe_run_240927.md
+](https://raw.githubusercontent.com/EivindStensrud/EchoPipe/refs/heads/main/Micromonas_example/Micromonas_EchoPipe_run_240927.md)
