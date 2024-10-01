@@ -37,7 +37,7 @@ Remove clear dubious or wrongly annotated sequences from the aligned_sequences_t
 Save the file with the same name, aligned_sequences_to_curate.fasta.
 
 ## Complete the creation and curation of the reference template database.
-## A file called reference_template_database.fasta, is then created in the $RAWDIR.
+A file called reference_template_database.fasta, is then created in the $RAWDIR.
 
 ```
 cd $RAWDIR
