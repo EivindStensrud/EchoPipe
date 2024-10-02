@@ -77,6 +77,24 @@ python Echopipe_reference_template_database_creator.py -C
 ## Create a reference database  
 ## Use the script Echopipe_database_creation.py  
 This script is iterative, and could be re-run by changing the search options.
+The script dereplicates 100% identical sequences within a species, and introduces a counter, which reduce the file size, and help with curation of the database.
+The format of the database is:
+```
+>gb|Accession_number|NCBI_taxonomy|counter
+Fasta_sequence
+
+Example:
+
+>gb|KU244636.1|Eukaryota;Chlorophyta;Mamiellophyceae;Mamiellales;Mamiellaceae;Micromonas;Micromonas_bravo|5
+CCAGCAGCCGCGGTAATTCCAGCTCCAATAGCGTATATTTAAGTTGTTGCAGTTAAAAAG
+CTCGTAGTTGGATTTCGGTTGAGAACGGCCGGTCCGCCGTTTGGTGTGCACTGGCTGGTT
+TCAACTTCCTGTAGAGGACGCGCTCTGGCTTCACGGCTGGACGCGGAGTCTACGTGGTTA
+CTTTGAAAAAATTAGAGTGTTCAAAGCGGGCTTACGCTTGAATATTTCAGCATGGAATAA
+CACTATAGGACTCCTGTCCTATTTCGTTGGTCTCGGGACGGGAGTAATGATTAAGAGGAA
+CAGTTGGGGGCATTCGTATTTCATTGTCAGAGGTGAAATTCTTGGATTTATGAAAGACGA
+ACTTCTGCGAAAGCATTTGCCAAGGATGTTTTCATTAATCAAGAACGAAAGT
+```
+
 ### Options for Echopipe_database_creation.py   
 -a, Api.key from NCBI (required).  
 -e, Email address for NCBI to contact you (required).  
@@ -115,35 +133,55 @@ python Echopipe_database_creation.py micromonas_species_list.txt Micromas_24_09_
 ```
 
 There are several log files create when Echopipe_database_creation.py is ran.  
-$RAWDIR/Log_files/{date}_{run_number}_log.txt, Is a log file storing the setttings and run output.
-$RAWDIR/Log_files/{date}_{run_number}_taxid_collection.txt, Stores NCBI species name, taxid, name from species list, and NCBI taxonomy.
-$RAWDIR/Log_files/duplicate_species_entries.txt, If two or more species name from the species input file share the same NCBI species name, they are stored here.
-$RAWDIR/Log_files/species_not_found.txt, Species in the species input file not found in the NCBI taxonomy are stored here.
+$RAWDIR/Log_files/{date}_{run_number}_log.txt, Is a log file storing the setttings and run output.  
+$RAWDIR/Log_files/{date}_{run_number}_taxid_collection.txt, Stores NCBI species name, taxid, name from species list, and NCBI taxonomy.  
+$RAWDIR/Log_files/duplicate_species_entries.txt, If two or more species name from the species input file share the same NCBI species name, they are stored here.  
+$RAWDIR/Log_files/species_not_found.txt, Species in the species input file not found in the NCBI taxonomy are stored here.  
 
-For each species, information about sequences obtained and analysed are stored per run are created.
-$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_accession_numbers.txt, stores analyzed accession numbers each run.
-$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_fasta_blast_results.txt, stores alignment data. 
-$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_fasta_blast_results_check.fasta, stores potential new reference sequences.
-$RAWDIR/Species/{Species_name}/{Species_name}_analysed.accession_numbers.txt, stores all analyzed accession numbers from earlier runs.
-$RAWDIR/Species/{Species_name}/{Species_name}_new_accession_numbers_{date}_{run_number}.txt, stores new accession numbers each run, which have not been analyzed before.
-$RAWDIR/Species/{Species_name}/{Species_name}_new_seqs_{date}_{run_number}.fastam stores the sequences from the new accession numbers, which have not been analyzed before.
+For each species, information about sequences obtained and analysed are stored per run are created.  
+$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_accession_numbers.txt, stores analyzed accession numbers each run.  
+$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_fasta_blast_results.txt, stores alignment data.  
+$RAWDIR/Species/{Species_name}/{Species_name}_{date}_{run_number}_fasta_blast_results_check.fasta, stores potential new reference sequences.  
+$RAWDIR/Species/{Species_name}/{Species_name}_analysed.accession_numbers.txt, stores all analyzed accession numbers from earlier runs.  
+$RAWDIR/Species/{Species_name}/{Species_name}_new_accession_numbers_{date}_{run_number}.txt, stores new accession numbers each run, which have not been analyzed before.  
+$RAWDIR/Species/{Species_name}/{Species_name}_new_seqs_{date}_{run_number}.fasta, stores the sequences from the new accession numbers, which have not been analyzed before.  
 
-For each species, information about new accepted reference sequences are created in $RAWDIR/BLAST_results.
+For each species, information about new accepted reference sequences are created in $RAWDIR/BLAST_results/.
 $RAWDIR/BLAST_results/{date}_{run_number}_species_with_results.txt, stores what species accepted potential new reference sequences are found from.
 $RAWDIR/BLAST_results/{date}_{run_number}_to_curate.fasta, stores what sequences which needs to be manually curated.
 
 
 ## Curate database
-Use data created during this step to detect potential falsely annotated sequences.
-Accession number of dubious sequences may be copied to {date}.dubious_sequences.txt file.
-If the dubious sequences is deemed falsely annotated, add the accession number in the {date}.sequences_to_delete.txt file.
-
+To ensure that the sequences are correctly annotated, Echopipe_database_curation.py, generates several tools to detect false-annotations.  
+Example:
 ```
 python Echopipe_database_curation.py BLAST_results/2024-09-30_1_to_curate.fasta
 ```
+  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_aligned.fasta, Shows new sequences and old sequences aligned. New sequences are marked with *, note that first run all are marked.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_concatenated_file.fasta, Shows new sequences and old sequences not aligned. New sequences are marked with *, note that first run all are marked.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_dataframe.csv, Shows a brief summary if the species forms a monophyletic group.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_dubious_sequences.txt, Creates an empty files where the user may add weird or dubios sequences.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_sequences_to_delete.txt, An empty file where dubious sequenes which turned out to be false annotated should be stored. This file is used to delete sequences from the final reference database.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_duplicate_sequences.txt, Shows what species have sequences shared with other species.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_duplicate_species_entries.txt, If two or more species name from the species input file share the same NCBI species name, they are stored here.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_paraphyletic_group.txt, If sequences from a species creates a paraphyletic group, the species name is stored here.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_species_not_found.txt, If a species is not found, it is stored here.  
+$RAWDIR/Database_curation/{date}/{date}_{run_number}_tree_string.newick, A newick file used to visualized the gene tree in programs such as iTOL and TreeViewer to detect false-annotated sequences.  
 
-# Create the official database, give an official name, this case. Micromonas_24_09_31.fasta
-## If this is the initial round:
+To effectively and reproducible detect and remove false-annotated sequences, we recommend to use a combination of the duplicate sequences, monophyletic and paraphyletic species name, combined with Web-Blast on both the aligned sequence aswell as accession number. We will highlight the importance, and benefits of using the counter when determining if the sequence is false annotated or not.
+
+Example of a visualization of the Newick file.
+
+<img width="553" alt="image" src="https://github.com/user-attachments/assets/1f37df6b-8615-4f32-9016-c688ab74af25">
+
+
+<img width="485" alt="image" src="https://github.com/user-attachments/assets/9be211f6-3832-4be3-8888-cf37c5852da5">
+
+
+
+## Create the official database, give an official name, this case. Micromonas_24_09_31.fasta
+### If this is the initial round:
 ```
 python Echopipe_database_completion.py BLAST_results/2024-09-30_1_to_curate.fasta Micromas_24_09_30.fasta
 ```
