@@ -302,6 +302,9 @@ dads = DADA2 assignSpecies
 idt = IDTAXA  
 qiime = QIIME 2  
 
+Example:  
+Create a DADA2 assignSpecies compatible database  
+  
 ```
 python Echopipe_reformat.py Micromas_24_09_30.fasta dads 
 ```
