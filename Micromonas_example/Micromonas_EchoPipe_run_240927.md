@@ -271,15 +271,26 @@ $RAWDIR/Evaluation/Micromas_24_10_02/{Database_name}/{Database_name}_evaluation_
 $RAWDIR/Evaluation/Micromas_24_10_02/{Database_name}/{Database_name}_evaluation_family_summary.csv, Gives a summary of the different families.  
 
 GC-content:  
-![Micromas_24_10_02_GC_content_histogram](https://github.com/user-attachments/assets/c935d21e-4eae-4e2e-b96c-0d7827084433)
+
+![Micromas_24_10_02_GC_content_histogram](https://github.com/user-attachments/assets/c935d21e-4eae-4e2e-b96c-0d7827084433)  
+  
+  
 Sequence summary:  
-<img width="772" alt="image" src="https://github.com/user-attachments/assets/ec296794-08d2-49a3-bafa-c3a50b3834f8">
+  
+  
+<img width="772" alt="image" src="https://github.com/user-attachments/assets/ec296794-08d2-49a3-bafa-c3a50b3834f8">  
+  
+  
 Species summary:  
-<img width="736" alt="image" src="https://github.com/user-attachments/assets/bef10dcb-824b-4563-9c73-2950fe5b4d0b">
+  
+<img width="736" alt="image" src="https://github.com/user-attachments/assets/bef10dcb-824b-4563-9c73-2950fe5b4d0b">  
+  
+  
 Family summary:  
-<img width="452" alt="image" src="https://github.com/user-attachments/assets/965ad752-3cf5-4113-b06e-6607ee023f81">
-
-
+  
+<img width="452" alt="image" src="https://github.com/user-attachments/assets/965ad752-3cf5-4113-b06e-6607ee023f81">  
+  
+  
 ## Reformat database
 To ensure the database is usable for your annotation method, a reformat script can be run, which creates a new copy of the database.
 Available annotation methods are: 
