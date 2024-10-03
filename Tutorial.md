@@ -317,6 +317,6 @@ Create a DADA2 assignSpecies compatible database
 ```
 python Echopipe_reformat.py Micromas_24_09_30.fasta dads 
 ```
-The files are then stored in $RAWDIR, with the annotation extention.
-Example: 
+The files are then stored in $RAWDIR, with the annotation extention.  
+Example:  
 Micromas_24_10_02_dads.fasta
