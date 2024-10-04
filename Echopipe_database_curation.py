@@ -191,6 +191,7 @@ if duplicate_sequences:
 
 # Run FastTree to generate a Newick tree file.
 fasttree_cline = FastTreeCommandline(
+    nt=True,
     input=maffted_file,
     out=tree_string
 )
