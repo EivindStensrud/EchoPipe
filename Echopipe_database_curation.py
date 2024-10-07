@@ -8,6 +8,10 @@
 # NOTE: FastTree must be installed! In base: conda install bioconda::fasttree
 # NOTE: ETE3 must be installed! In bash: pip install ete3
 
+import warnings
+from Bio import BiopythonDeprecationWarning
+# Suppress the specific Biopython deprecation warnings
+warnings.simplefilter('ignore', BiopythonDeprecationWarning)
 
 from Bio.Align.Applications import MafftCommandline # Let's us utilize MAFFT in Biopython as long as it has been installed.
 from Bio.Phylo.Applications import FastTreeCommandline # Let's us utilize FastTree in Biopython as long as it has been installed.
@@ -24,20 +28,23 @@ import argparse # Allows the program to be run from the command line.
 ###
 
 parser = argparse.ArgumentParser(
-    prog="EchoPipe - Database curation",
-    description="A tool for curating reference databases by creating phylogenetic trees to be reviewed.",
+    prog="EchoPipe - Database curation [-h] [-o OLD_DB] [-N NUM_NS] INPUT_FILE",
+    description="A tool for curating reference databases.",
     epilog="Version 1.0")
 
-parser.add_argument('input_file', type=str,
-    help="The database that is to be reviewed. Expects a .fasta file from BLAST_results/.")
-parser.add_argument('-o', '--old_database', type=str, default="",
-    help="The most recent database that is to be updated in this iteration. Note: The reference template database is not intended for this.")
+parser.add_argument('input_file', type=str, metavar='INPUT_FILE',
+    help="Database to revise. Expects a .fasta file from BLAST_results/.")
+parser.add_argument('-o', '--old_database', type=str, default= "", metavar='OLD_DB',
+    help="The previous version of database. Note: The reference template database is not intended for this.")
+parser.add_argument('-N', '--number_ns', type=int, default=1, metavar='NUM_NS',
+    help="Number of N's and ambigious nucleotides allowed in a reference sequence, default = 1.")
+
 
 args = parser.parse_args()
 
 new_potential_sequences = os.path.abspath(args.input_file) # New sequences that are to be added to the existing ones and manually evaluated.
 most_recent_database = os.path.abspath(args.old_database) # Input by the user! Does not exist on the first run, but is used on subsequent runs after curation and evaluation, where dubious sequences should be removed.
-
+number_ambigious_nucleotides = args.number_ns
 program_timer = time.time()
 
 
@@ -46,6 +53,7 @@ program_timer = time.time()
 ###
 
 # Filters away sequences that has other bases than ACGT (could, for example, be N). Creates a temporary output_file.
+# With the else statement, sequences can be accepted if they have less than the number_ambigious_nucleotides defined by the user.
 def filter_sequences(input_file, output_file):
     with open(output_file, "w") as out_handle:
         for record in SeqIO.parse(input_file, "fasta"):
@@ -54,8 +62,11 @@ def filter_sequences(input_file, output_file):
                 out_handle.write(f">{record.id}\n")
                 out_handle.write(str(record.seq) + "\n")
                 #SeqIO.write(record, out_handle, "fasta") # This could be used as a single line, but causes issues downstreams with the formatting.
-            else:
-                print(f"The accession number {record.id.split('|')[1]} included bases other than ACGT in its sequence and is therefore omitted.")
+            else: 
+                non_acgt_count = sum(1 for base in sequence if base not in "ACGT")
+                if non_acgt_count <= number_ambigious_nucleotides:
+                    out_handle.write(f">{record.id}\n")
+                    out_handle.write(str(record.seq) + "\n")
 
 # Add * to new_potential_sequences in order to be able to distinguish new sequences from previously curated ones when evaluating the tree.
 def add_symbol_to_new_sequence(new_potential_sequences):
@@ -72,7 +83,6 @@ def add_symbol_to_new_sequence(new_potential_sequences):
 # Creates a dictionary with duplicate sequences and their headers.
 def find_duplicates(concatenated_fasta_file):
     sequence_dict = {}
-
     with open(concatenated_fasta_file, "r") as file:
         current_header = None
         current_sequence = ""
@@ -275,5 +285,9 @@ os.remove(temp_filtered_file)
 
 program_duration = round(time.time() - program_timer, 2)
 print(f"\nIt took {program_duration} seconds from start to finish.\n")
+print("\nRecommendation:\n")
+print("Choose database name, we recommend to include organisms group and date:\n")
+print(f"Code line: python Echopipe_database_completion.py BLAST_results/{run_name}_to_curate.fasta Database_name_{run_name}.fasta\n")
+
 
 os.chdir("../..")
