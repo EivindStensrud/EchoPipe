@@ -869,7 +869,7 @@ append_and_print_message(log_file,
 
 print("\nRecommendation:\n")
 print("To help curate the database:\n")
-print(f"Next code line: python Echopipe_database_curation.py BLAST_results/{run_name}_to_curate.fasta.fasta\n")
+print(f"Next code line: python Echopipe_database_curation.py BLAST_results/{run_name}_to_curate.fasta\n")
 
 
 database_curation = f"Database_curation/{run_name}/"
