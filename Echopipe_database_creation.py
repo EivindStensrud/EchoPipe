@@ -14,6 +14,10 @@ This pipeline mines potential reference sequences for eDNA metabarcoding studies
 The required input files are a species list (both .txt and .csv works) and a few reference sequences of the genomic area of interest of related species (.fasta).
 Additional inputs are the user's email address and their API key to NCBI, which are required for optimal performance.
 """
+import warnings
+from Bio import BiopythonDeprecationWarning
+# Suppress the specific Biopython deprecation warnings
+warnings.simplefilter('ignore', BiopythonDeprecationWarning)
 
 from Bio import Entrez # Used for working with and obtaining data from NCBI.
 from Bio import SeqIO # Used for parsing sequence information.
@@ -31,10 +35,9 @@ from datetime import datetime # So that we can get the current day's date.
 import argparse # Allows the program to be run from the command line.
 
 
-###
-### argparse stuff
-###
-
+# Input parameters
+#
+#
 parser = argparse.ArgumentParser(
     prog="EchoPipe - Database creation",
     description="This script creates an uncurated reference database.",
@@ -44,29 +47,29 @@ group_1 = parser.add_argument_group("Arguments used to generate the uncurated re
 group_1.add_argument('input_file', type=str,
     help="A txt file or CSV with a list of species names.")
 group_1.add_argument('input_database', type=str,
-    help="The path to the input reference database fasta file.")
+    help="Path to the input reference database fasta file.")
 group_1.add_argument('-e', '--email', type=str, default="eivisten@uio.no",
-    help="The user's email address associated with the NCBI API key.")
+    help="User's email address associated with the NCBI API key.")
 group_1.add_argument('-a', '--api_key', type=str, default="5538bd02e0d704e3416263ad4d51c74b7608",
-    help="The user's NCBI API key.")
+    help="User's NCBI API key.")
 group_1.add_argument('-s', '--sort', action="store_true",
-    help="Sort by length, targets longer sequences.")
+    help="Sort by length, if implemented, targets longer sequences (Not recommended).")
 group_1.add_argument('-c', '--maxcount', type=int, default=10000,
-    help="The maximum number of accession numbers downloaded per species. Default = 10 000.")
+    help="Maximum number of accession numbers downloaded per species, default = 10 000.")
 group_1.add_argument('-l', '--maxlength', type=int, default=22000,
-    help="The longest allowed sequence length for an accession number to be analysed. Default = 22 000, targets mitochondrial sequences.")
+    help="Longest allowed sequence length for an accession number to be analysed, default = 22 000.")
 group_1.add_argument('-z', '--ampliconsize', type=int, default=50,
-    help="The minimum size an amplicon may be in order to not be rejected. Consider adjusting this based on the marker region. Default = 50.")
+    help="Minimum size an amplicon may be in order to accepted. Consider adjusting this based on the marker region. Default = 50.")
 group_1.add_argument('-m', '--mitochondria', action='store_true',
-    help="The search targets mitochondrial sequences.")
+    help="Search targets mitochondrial sequences.")
 group_1.add_argument('-r', '--ribosomal', action='store_true',
-    help="The search result will only return accession numbers that have been annotated with mitochondrial 12S ribosomal DNA.")
+    help="Search result will only return accession numbers that have been annotated with mitochondrial 12S ribosomal DNA.")
 group_1.add_argument('-q', '--query', action='store_true',
-    help='The search result will include the user input search term(s). Example, limit the search to 12S region: -q "AND 12S". To exclude a term write "NOT 12S".')
+    help='Search result will include the user input search term(s). Example, limit the search to 12S region: -q "AND 12S". To exclude a term write "NOT 12S".')
 group_1.add_argument('-b', '--batch_size', type=int, default=5000,
-    help="The amount of sequences that can be downloaded simultaneously. Default = 5000. Only need to consider using this with values lower than the default and only use it in conjunction with --maxlength and expecting to download very large sequences (size of chromosomes).")
+    help="Amount of sequences that can be downloaded simultaneously. Default = 5000. Only need to consider using this with values lower than the default and only use it in conjunction with --maxlength and expecting to download very large sequences (size of chromosomes).")
 group_1.add_argument('-t', '--taxid', action='store_true', default="",
-    help="The last saved taxid list is used. Only use if the same input from that run is wanted!")
+    help="Use last saved taxid list. Can be used to change NCBI taxonomy (Not recommended)")
 group_1.add_argument('-E', '--evalue', type=int, default=5,
     help="The E-value used for BLAST. The higher the value entered, the more stringent the BLAST becomes. Default = 5.")
 group_1.add_argument('-R', '--repeat', action='store_true', default="",
@@ -864,6 +867,11 @@ append_and_print_message(log_file,
     f"\n\n\nIt took {program_duration} seconds from start to finish.\n"
     f"The program finished at {end_timestamp}.\n")
 
+print("\nRecommendation:\n")
+print("To help curate the database:\n")
+print(f"Next code line: python Echopipe_database_curation.py BLAST_results/{run_name}_to_curate.fasta.fasta\n")
+
+
 database_curation = f"Database_curation/{run_name}/"
 create_directory(database_curation) # Creates a directory for files related to database curation if it does not already exist.
 error_collection_date = f"{database_curation}{run_name}_species_not_found.txt"
@@ -878,3 +886,4 @@ with open(duplicate_collection, "r") as outfile:
     with open(duplicate_collection_date, "w") as infile:
         for line in outfile:
             infile.writelines(line)
+            
