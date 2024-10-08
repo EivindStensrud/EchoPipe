@@ -6,6 +6,10 @@
 # The user may either choose to download sequences based on a species list of their own, or they may provide a fasta file with sequences.
 # ---------------------------------------------------------------------------
 
+import warnings
+from Bio import BiopythonDeprecationWarning
+# Suppress the specific Biopython deprecation warnings
+warnings.simplefilter('ignore', BiopythonDeprecationWarning)
 
 from Bio import Entrez
 from Bio import SeqIO
@@ -31,7 +35,7 @@ parser = argparse.ArgumentParser(
 
 group_1 = parser.add_argument_group("Arguments used to generate an uncurated reference template.\nThe required arguments are input_file, -f (--forward), -r (--reverse), -e (--email) and -a (--api_key)")
 group_1.add_argument('input_file', type=str, nargs='?',
-    help="A TXT file or CSV with a list of species names or a fasta file that is to be converted into the reference template database (-p is then required).")
+    help="Txt or CSV file species names or a fasta file that is to be converted into the reference template database (-p is then required).")
 group_1.add_argument('-f', '--forward',
     help="The forward primer used to find region of interest, (5'-3' orientation).")
 group_1.add_argument('-r', '--reverse',
@@ -56,11 +60,17 @@ group_1.add_argument('-z', '--longest_amplicon_size', type=float, default=2,
 group_2 = parser.add_argument_group("Argument used to finish the curated reference template database.")
 group_2.add_argument('-C', '--Complete', action="store_true",
     help="Completes the reference template database.")
+group_2.add_argument('input_file_species', type=str, nargs='?',
+    help="Txt or CSV file species names or a fasta file that is to be converted into the reference template database (-p is then required).")
+
 
 args = parser.parse_args()
 
 working_directory = "Reference_template_creation/"
 to_be_curated = "aligned_sequences_to_curate.fasta"
+species_list_name = args.input_file
+species_list_name_C = args.input_file_species
+
 
 if not args.Complete:
     if not all ([args.input_file, args.forward, args.reverse, args.email, args.api_key]):
@@ -379,3 +389,13 @@ else: # This step is triggered with -C, --Complete. It removes the primer sequen
                 file.write(f"{str(record.seq.replace('-', ''))}\n")
 
     print("reference_template_database.fasta has been created and ready for use with Echopipe_database_creation.py")
+
+if vars(args).get('Complete'):
+    print("\nRecommendation:\n")
+    print(f"Next code line: python Echopipe_database_creation.py {args.input_file} reference_template_database.fasta -e {args.email} -a {args.api_key} \n")
+
+else:
+    print("\nRecommendation:\n")
+    print("First remove sequences arising from other gene regions, see tutorial for detailed explanation:\n")
+    print(f"Next code line: python Echopipe_reference_template_database_creator.py -e {args.email} -a {args.api_key} {args.input_file} -C \n")
+
