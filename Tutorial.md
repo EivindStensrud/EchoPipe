@@ -56,7 +56,7 @@ conda activate EchoPipe
 
 
 ```
-python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -r ACTTTCGTTCTTGATYRATGA -l 35000 -e your.email -t 200 -m 100 -a your.NCBIApiKey micromonas_species_list.txt
+python Echopipe_reference_template_database_creator.py -f CCAGCASCYGCGGTAATTCC -r ACTTTCGTTCTTGATYRATGA -l 35000 -e your.email -t 200 -m 10 -a your.NCBIApiKey micromonas_species_list.txt
 cd $RAWDIR/Reference_template_creation
 ```
     
@@ -96,7 +96,7 @@ A file called reference_template_database.fasta, is then created in the $RAWDIR.
 
 ```
 cd $RAWDIR
-python Echopipe_reference_template_database_creator.py -C 
+python Echopipe_reference_template_database_creator.py -e your.email -a your.NCBIApiKey micromonas_species_list.txt -C
 ```
 
 ## Create a reference database  
