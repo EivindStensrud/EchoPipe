@@ -64,7 +64,7 @@ group_1.add_argument('-m', '--mitochondria', action='store_true',
     help="Search targets mitochondrial sequences.")
 group_1.add_argument('-r', '--ribosomal', action='store_true',
     help="Search result will only return accession numbers that have been annotated with mitochondrial 12S ribosomal DNA.")
-group_1.add_argument('-q', '--query', action='store_true',
+group_1.add_argument('-q', '--query',
     help='Search result will include the user input search term(s). Example, limit the search to 12S region: -q "AND 12S". To exclude a term write "NOT 12S".')
 group_1.add_argument('-b', '--batch_size', type=int, default=5000,
     help="Amount of sequences that can be downloaded simultaneously. Default = 5000. Only need to consider using this with values lower than the default and only use it in conjunction with --maxlength and expecting to download very large sequences (size of chromosomes).")

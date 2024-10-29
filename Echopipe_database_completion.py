@@ -4,6 +4,11 @@
 This script will merge the content of two databases and provide a new output file where new sequences have been appended and known sequences are counted.
 """
 
+import warnings
+from Bio import BiopythonDeprecationWarning
+# Suppress the specific Biopython deprecation warnings
+warnings.simplefilter('ignore', BiopythonDeprecationWarning)
+
 from Bio.Align.Applications import MafftCommandline # Let's us utilize MAFFT in Biopython as long as it has been installed.
 from Bio.Phylo.Applications import FastTreeCommandline # Let's us utilize FastTree in Biopython as long as it has been installed.
 from Bio import SeqIO

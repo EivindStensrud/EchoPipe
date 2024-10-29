@@ -152,9 +152,10 @@ if not args.Complete:
                                 search_handle.close()
 
                                 if int(search_record["Count"]) == 0:
-                                    print(f'The search term: "{search}" did not return any results.')
+                                    print(f'The search term: "{search}" \033[31m did not return any results. \033[0m')
                                     list_of_not_found.append(species)
-                                else:    
+                                else:
+                                    print(f'The search term: "{search}" \033[32m did return results. \033[0m')
                                     webenv = search_record["WebEnv"]
                                     query_key = search_record["QueryKey"]
                                 
