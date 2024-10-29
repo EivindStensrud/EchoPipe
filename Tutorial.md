@@ -25,7 +25,7 @@ If the results is not conda 24.5.0, please update your conda version.
 Flowchart of the EchoPipe's workflow. Each color represents a module of the workflow and the corresponding script. Light-yellow: EchoPipe – Reference template database creator. Yellow: EchoPipe – Database creation. Orange: EchoPipe – Database curation. Red: EchoPipe – Database completion. Illustration is made with InkScape.
 
 ## Preparation
-This tutorial assumes that the EchoPipe scripts is located in the RAWDIR, in this example the EchoPipe_Official/240927_PR2 path.
+This tutorial assumes that the EchoPipe scripts is located in the RAWDIR, in this example the EchoPipe_Official/240927_PR2 path. After each program is finished, a recommended code line is presented to continue the workflow.
 
 ```
 RAWDIR=EchoPipe_Official/240927_PR2
