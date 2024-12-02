@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+#!/usr/bin/env Rscript
 
 if (!require("ggplot2")) {
    install.packages("ggplot2", dependencies = TRUE)
@@ -51,8 +52,8 @@ if (is.null(opt$Input_path)){
 
 #Reformats the annotation to work with LCA annotation.
 
-RootPath <- file.path(opt$Input_path) # Change to the path, where the result from DADA2 pipeline or similar pipelines is stored.
-FigsPath <- file.path(opt$Output_path) # Path where output will be stored.
+RootPath <- file.path("/cluster/projects/nn9745k/02_results/47_Nick/241009/Figs") # Change to the path, where the result from DADA2 pipeline or similar pipelines is stored.
+FigsPath <- file.path("/cluster/projects/nn9745k/02_results/47_Nick/241009/Figs") # Path where output will be stored.
 
 
 print("RootPath")
@@ -85,14 +86,13 @@ taxonomy = sapply(strsplit(tax_db$Subject, split="\\|"), function(x) {
 })
 
 blast_results_db$"Taxonomy" = taxonomy # creates a column with taxonomy
-#blast_results_db$Subject = (stringr::str_replace_all(blast_results_db$Subject, ";", " / ")) # Replaces ";" with "/" in the taxonomic ranking to become compatible with downstream analysis
-#blast_results_db$Subject = (stringr::str_replace_all(blast_results_db$Subject, "[[|]]", "/")) # Replaces ";" with "/" in the taxonomic ranking to become compatible with downstream analysis
+blast_results_db$Subject = (stringr::str_replace_all(blast_results_db$Subject, ";", "/")) # Replaces ";" with "/" in the taxonomic ranking to become compatible with downstream analysis
+blast_results_db$Subject = (stringr::str_replace_all(blast_results_db$Subject, "[[|]]", "/")) # Replaces ";" with "/" in the taxonomic ranking to become compatible with downstream analysis
 
 
 tax_acc = data.frame(unique(blast_results_db$Subject))
-#not working properly from here and downwards
 colnames(tax_acc)= c("Subject")
-tax_accno = str_extract(tax_acc$Subject, "(?<=gb\\|)[^|]+")
+tax_accno = str_extract(tax_acc$Subject, "(?<=gb\\/)[^/]+")
 
 
 tax_accno = data.frame(cbind(tax_acc, tax_accno))
