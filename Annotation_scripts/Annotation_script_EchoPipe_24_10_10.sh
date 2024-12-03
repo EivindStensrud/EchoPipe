@@ -155,11 +155,7 @@ echo "Finished with LCA annotation"
 echo " "
 
 
-#RAWDIR=$Input_path
-#RESDIR=$Input_path/Figs
-
 Rscript $Script_path/Create_phyloseq_object.R -i $Input_path -o $Output_path -b $Blast_id_cutoff -c $Blast_cov_cutoff
-Rscript $Script_path/Create_phyloseq_object.R -i $RAWDIR -o $RAWDIR -b $Blast_id_cutoff -c $Blast_cov_cutoff
 
 echo " "
 echo " "
