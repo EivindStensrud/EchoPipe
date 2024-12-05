@@ -1,5 +1,4 @@
 #!/usr/bin/env Rscript
-#!/usr/bin/env Rscript
 
 if (!require("ggplot2")) {
    install.packages("ggplot2", dependencies = TRUE)
@@ -52,8 +51,8 @@ if (is.null(opt$Input_path)){
 
 #Reformats the annotation to work with LCA annotation.
 
-RootPath <- file.path("/cluster/projects/nn9745k/02_results/47_Nick/241009/Figs") # Change to the path, where the result from DADA2 pipeline or similar pipelines is stored.
-FigsPath <- file.path("/cluster/projects/nn9745k/02_results/47_Nick/241009/Figs") # Path where output will be stored.
+RootPath <- file.path(opt$Input_path) # Change to the path, where the result from DADA2 pipeline or similar pipelines is stored.
+FigsPath <- file.path(opt$Output_path) # Path where output will be stored.
 
 
 print("RootPath")
@@ -67,22 +66,17 @@ colnames(blast_results_db) <- c( "Query ID", "Subject", "Identity percentage",
 "S.start", "S.end", "Evalue", "Bitscore" ) # EchoPipe build-up, header goes into Subject
 
 
-#summary(blast_results_db) # Checks if everything works
-#dim(blast_results_db)
-#length(unique(blast_results_db$Subject))
-#length(unique(blast_results_db$"Query ID"))
-
 tax_db = data.frame(stringr::str_replace_all(blast_results_db$Subject, ";", " / ")) # Replaces ";" with "/" in the taxonomic ranking to become compatible with downstream analysis
 colnames(tax_db) = c("Subject")
 taxonomy = sapply(strsplit(tax_db$Subject, split="\\|"), function(x) {
-  # The taxonomy part is the third element in the split list
-  taxonomy = x[3]
+   # The taxonomy part is the third element in the split list
+   taxonomy = x[3]
   
-  # Remove potential trailing characters (like numbers and the last pipe) after the taxonomy
-  taxonomy_clean = sub("\\|.*$", "", taxonomy)
+   # Remove potential trailing characters (like numbers and the last pipe) after the taxonomy
+   taxonomy_clean = sub("\\|.*$", "", taxonomy)
   
-  # Return the clean taxonomy
-  return(taxonomy_clean)
+   # Return the clean taxonomy
+   return(taxonomy_clean)
 })
 
 blast_results_db$"Taxonomy" = taxonomy # creates a column with taxonomy
