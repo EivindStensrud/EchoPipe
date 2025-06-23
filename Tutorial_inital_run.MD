@@ -3,21 +3,22 @@
 ## Background
 EchoPipe is an iterative, reproducible pipeline for creating, curating and evaluating reference databases for environmental DNA metabarcoding studies.  
 By being an interative workflow, the workload, memory- and time usage is reduced, while coverage of the species of interest is increased.  
-The entire pipeline is written in Python, and is distributed through Conda, which eases and streamlines the installation and usage. (For installation, see the Preparation step)  
+The entire pipeline is written in Python, and is distributed through Conda, which eases and streamlines the installation and usage. 
+For installation, see README.md
 
 ## Requirements
-### There are few required inputs for the workflow.
-NCBI API key, needs to be obtained.  
-Species list with scientific name.  
-Email which NCBI may contact you.  
-Forward and reverse primer sequence spanning the region of interest (both in 5'-3').  
-Conda version 24.5.0
+### There are few required inputs for the workflow:
+** [NCBI API key](https://support.nlm.nih.gov/kbArticle/?pn=KA-05317) ** 
+** Species list with scientific name **
+** Email **  
+** Forward and reverse primer sequence spanning the region of interest (both in 5'-3') **
+** [Conda version 24.5.0](https://anaconda.org/anaconda/conda/files?version=24.5.0) **
 
-Check conda version with the following commands:
+Use the following code to ensure you have the correct conda version.
 
 ```
 conda --version
-conda 24.5.0 
+Expected output: conda 24.5.0 
 ``` 
 If the results is not conda 24.5.0, please update your conda version.
 
