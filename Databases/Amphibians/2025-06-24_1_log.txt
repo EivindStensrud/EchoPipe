@@ -2,14 +2,14 @@
 Thanks for using EchoPipe, an iterative pipeline to create, curate and evaluate your reference database for environmental DNA studies
 For more information see the GitHub repository: https://github.com/EivindStensrud/EchoPipe/tree/main
 
-The command used to run the script was: python Echopipe_reference_template.py Norwegian_swedish_amphibians_250214.csv -f ACACCGCCCGTCACCCT -r GTAYACTTACCATGTTACGACTT -l 1000 -e eivind@ednasolutions.se -t 40 -m 5 -q AND 12S -a 5538bd02e0d704e3416263ad4d51c74b7608
+The command used to run the script was: python Echopipe_reference_template.py species_list_Daniel_Fish_scandinavia_complete.txt -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -l 1000 -e eivind@ednasolutions.se -t 170 -m 5 -q AND 12S -a 5538bd02e0d704e3416263ad4d51c74b7608
  
 Reference_template_creation was conducted with the following settings:
-Initated at: 2025-06-24 09:52:43
-Input file: Norwegian_swedish_amphibians_250214.csv
-Forward primer: 5'-ACACCGCCCGTCACCCT-3'
-Reverse primer: 5'-GTAYACTTACCATGTTACGACTT-3'
-Minimum sequence length: 40
+Initated at: 2025-06-24 10:35:27
+Input file: species_list_Daniel_Fish_scandinavia_complete.txt
+Forward primer: 5'-GTCGGTAAAACTCGTGCCAGC-3'
+Reverse primer: 5'-CATAGTGGGGTATCTAATCCCAGTTTG-3'
+Minimum sequence length: 170
 Maximum sequence length: 1000
 Maximum amplicon cutoff multiplier: 2
 Email address: eivind@ednasolutions.se
@@ -17,36 +17,36 @@ API key: 5538bd02e0d704e3416263ad4d51c74b7608
 The amount of sequences downloaded per species: 5
 
 Custom query: AND 12S
-Search term: [Organism] AND ("40"[SLEN] : "1000"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" AND 12S
+Search term: [Organism] AND ("170"[SLEN] : "1000"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" AND 12S
 A draft of the reference template database has been created.
 Make sure to review Reference_template_creation/aligned_sequences_to_curate.fasta before finalizing it to a reference template database with -C (--Complete).
-Finished at: 2025-06-24 09:53:00
+Finished at: 2025-06-24 10:39:55
 
-It took 17.25 seconds to run the program.
+It took 267.93 seconds to run the program.
 
 ##############################################################################
 
 
-The command used to run the script was: python Echopipe_reference_template.py Norwegian_swedish_amphibians_250214.csv -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608 -C
+The command used to run the script was: python Echopipe_reference_template.py species_list_Daniel_Fish_scandinavia_complete.txt -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608 -C
 
 
 Reference_template_creation was completed by using the -C option:
-Initiated at: 2025-06-24 09:55:02
-Finished at: 2025-06-24 09:55:02
+Initiated at: 2025-06-24 10:45:12
+Finished at: 2025-06-24 10:45:12
 
 It took 0.0 seconds to run the program.
 
 ##############################################################################
-The command used to run the script was: python Echopipe_database_creation.py Norwegian_swedish_amphibians_250214.csv reference_template_database.fasta -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608
+The command used to run the script was: python Echopipe_database_creation.py species_list_Daniel_Fish_scandinavia_complete.txt reference_template_database.fasta -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608
 
 
 Reference database was created with the following settings:
-This log file contains information from the run 2025-06-24_1 at 09:55:14.
+This log file contains information from the run 2025-06-24_1 at 10:45:17.
 
 ------------------------------------------------------------------------------
 
 The script was run with the following settings:
-Input file: Norwegian_swedish_amphibians_250214.csv
+Input file: species_list_Daniel_Fish_scandinavia_complete.txt
 Input reference database: reference_template_database.fasta
 Email address: eivind@ednasolutions.se
 API key: 5538bd02e0d704e3416263ad4d51c74b7608
@@ -64,14 +64,19 @@ Template database creation completed successfully in directory: Template_databas
 
 Species information download is starting...
 
-Species information download is finished. Please note:
-HTTPError: Failed to download information about Epidalea calamita - HTTP Error 429: Too Many Requests
+Species information download is finished! No errors detected.
+It took 144.27 seconds to finish.
+
+--------------------------------------------------------------------------
+
+
 Non-valid species name found. See Log_files/2025-06-24_1_species_not_found.txt
+Duplicate species name found. See Log_files/2025-06-24_1_duplicate_species_entries.txt
 The following species had sequences on NCBI. See Log_files/2025-06-24_1_species_found.txt
 Accession number download is starting...
 
 Accession number download is finished! No errors detected.
-It took 18.31 seconds to finish.
+It took 215.63 seconds to finish.
 
 --------------------------------------------------------------------------
 
@@ -80,7 +85,7 @@ Note: Not all sequences were downloaded for one or more species since --maxcount
 Suggestion: Run program again with 2025-06-24_1_over_max.csv as input after database curation.
 Make sure to adjust parameters such as --maxcount and/or --sort by sequence length.
 
-31 out of 31 species have new accession numbers.
+547 out of 549 species have new accession numbers.
 
 --------------------------------------------------------------------------
 
@@ -88,15 +93,141 @@ Make sure to adjust parameters such as --maxcount and/or --sort by sequence leng
 Sequence download is starting...
 
 Sequence download is finished! No errors detected.
-It took 147.42 seconds to finish.
+It took 514.82 seconds to finish.
 
 --------------------------------------------------------------------------
 
 
 BLAST extraction is starting...
+However, these species had no BLAST results from their sequences:
+Acantholatris monodactylus
+However, these species had no BLAST results from their sequences:
+Anoplogaster brachycera
+However, these species had no BLAST results from their sequences:
+Apristurus manis
+However, these species had no BLAST results from their sequences:
+Apristurus microps
+However, these species had no BLAST results from their sequences:
+Aristostomias grimaldii
+However, these species had no BLAST results from their sequences:
+Astronesthes similus
+However, these species had no BLAST results from their sequences:
+Brama brama
+However, these species had no BLAST results from their sequences:
+Brotulotaenia crassa
+However, these species had no BLAST results from their sequences:
+Brotulotaenia nigra
+However, these species had no BLAST results from their sequences:
+Buenia jeffreysii
+However, these species had no BLAST results from their sequences:
+Centrophorus uyato
+However, these species had no BLAST results from their sequences:
+Coptodon guineensis
+However, these species had no BLAST results from their sequences:
+Coregonus pidschian
+However, these species had no BLAST results from their sequences:
+Coregonus widegreni
+However, these species had no BLAST results from their sequences:
+Cottus koshewnikowi
+However, these species had no BLAST results from their sequences:
+Dentex maroccanus
+However, these species had no BLAST results from their sequences:
+Diaphus adenomus
+However, these species had no BLAST results from their sequences:
+Echinorhinus brucus
+However, these species had no BLAST results from their sequences:
+Epigonus telescopus
+However, these species had no BLAST results from their sequences:
+Epinephelus caninus
+However, these species had no BLAST results from their sequences:
+Epinephelus costae
+However, these species had no BLAST results from their sequences:
+Epinephelus goreensis
+However, these species had no BLAST results from their sequences:
+Eustomias filifer
+However, these species had no BLAST results from their sequences:
+Eustomias schiffi
+However, these species had no BLAST results from their sequences:
+Gaidropsarus mediterraneus
+However, these species had no BLAST results from their sequences:
+Gnathophis mystax
+However, these species had no BLAST results from their sequences:
+Grammatostomias circularis
+However, these species had no BLAST results from their sequences:
+Halobatrachus didactylus
+However, these species had no BLAST results from their sequences:
+Hyperoglyphe perciformis
+However, these species had no BLAST results from their sequences:
+Hypleurochilus bermudensis
+However, these species had no BLAST results from their sequences:
+Kali colubrina
+However, these species had no BLAST results from their sequences:
+Knipowitschia longecaudata
+However, these species had no BLAST results from their sequences:
+Lebetus guilleti
+However, these species had no BLAST results from their sequences:
+Lebetus scorpioides
+However, these species had no BLAST results from their sequences:
+Lepidorhombus boscii
+However, these species had no BLAST results from their sequences:
+Leptostomias bilobatus
+However, these species had no BLAST results from their sequences:
+Lophius vaillanti
+However, these species had no BLAST results from their sequences:
+Lycodes frigidus
+However, these species had no BLAST results from their sequences:
+Mycteroperca fusca
+However, these species had no BLAST results from their sequences:
+Neogobius pallasi
+However, these species had no BLAST results from their sequences:
+Myxine glutinosa
+However, these species had no BLAST results from their sequences:
+Oxynotus centrina
+However, these species had no BLAST results from their sequences:
+Parablennius zvonimiri
+However, these species had no BLAST results from their sequences:
+Parachondrostoma toxostoma
+However, these species had no BLAST results from their sequences:
+Paralepis brevirostris
+However, these species had no BLAST results from their sequences:
+Paralepis coregonoides
+However, these species had no BLAST results from their sequences:
+Photonectes dinema
+However, these species had no BLAST results from their sequences:
+Photonectes leucospilus
+However, these species had no BLAST results from their sequences:
+Pomatoschistus norvegicus
+However, these species had no BLAST results from their sequences:
+Ponticola eurycephalus
+However, these species had no BLAST results from their sequences:
+Ponticola gorlap
+However, these species had no BLAST results from their sequences:
+Proterorhinus marmoratus
+However, these species had no BLAST results from their sequences:
+Proterorhinus nasalis
+However, these species had no BLAST results from their sequences:
+Romanogobio belingi
+However, these species had no BLAST results from their sequences:
+Salvelinus lepechini
+However, these species had no BLAST results from their sequences:
+Sciadonus pedicellaris
+However, these species had no BLAST results from their sequences:
+Sebastes capensis
+However, these species had no BLAST results from their sequences:
+Serranus hepatus
+However, these species had no BLAST results from their sequences:
+Syngnathus abaster
+However, these species had no BLAST results from their sequences:
+Taractichthys longipinnis
+However, these species had no BLAST results from their sequences:
+Tetronarce nobiliana
+However, these species had no BLAST results from their sequences:
+Trachurus capensis
+However, these species had no BLAST results from their sequences:
+Trigla lyra
 
 BLAST extraction is finished! No errors detected.
-It took 16.25 seconds to finish.
+It took 146.21 seconds to finish.
 
 --------------------------------------------------------------------------
 
@@ -106,8 +237,8 @@ It took 16.25 seconds to finish.
 New sequence(s) found! BLAST_results/2025-06-24_1_to_curate.fasta is ready to be curated.
 
 Echopipe_database_creation.py
-The program finished at 09:58:29.
-It took 194.82 seconds from start to finish.
+The program finished at 11:02:19.
+It took 1021.87 seconds from start to finish.
 
 ##############################################################################
 
@@ -115,31 +246,31 @@ It took 194.82 seconds from start to finish.
 
 The command used to run the script was: python Echopipe_database_curation.py BLAST_results/2025-06-24_1_to_curate.fasta
 
-Align with MAFFT linsi using 103 sequencesRunning FastTree with standard settings, input: 2025-06-24_1_aligned.fasta and output: 2025-06-24_1_tree_string.newick with 103 sequences
+Align with MAFFT auto using 1834 sequences with 7 threadsRunning FastTree with standard settings, input: 2025-06-24_1_aligned.fasta and output: 2025-06-24_1_tree_string.newick with 1834 sequences
 Echopipe_database_creation.py
-It took 0.5 seconds from start to finish.
-The program finished at 10:00:03.
+It took 8.9 seconds from start to finish.
+The program finished at 11:13:52.
 ##############################################################################
 
 
 
-The command used to run the script was: python Echopipe_database_completion.py -b BLAST_results/2025-06-24_1_to_curate.fasta -c Database_curation/2025-06-24_1/2025-06-24_1_aligned.fasta -u Amphibians_2025-06-24_1.fasta
+The command used to run the script was: python Echopipe_database_completion.py -b BLAST_results/2025-06-24_1_to_curate.fasta -c Database_curation/2025-06-24_1/2025-06-24_1_aligned.fasta -u ScandiFish_2025-06-24_1.fasta
 
-Align with MAFFT linsi using 100 sequences
-Running FastTree with standard settings, input: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/Amphibians250623/Database_curation/2025-06-24_1/Curated_content/aligned_Amphibians_2025-06-24_1.fasta and output: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/Amphibians250623/Database_curation/2025-06-24_1/Curated_content/2025-06-24_1_curated_tree_string.newick with 100 sequences
-It took 0.8 seconds from start to finish.
-The program finished at 10:07:09.
-The reference database Amphibians_2025-06-24_1.fasta has successfully been created!
+Align with MAFFT auto using 1693 sequences with 6 threads
+Running FastTree with standard settings, input: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/ScandiFish250609/Database_curation/2025-06-24_1/Curated_content/aligned_ScandiFish_2025-06-24_1.fasta and output: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/ScandiFish250609/Database_curation/2025-06-24_1/Curated_content/2025-06-24_1_curated_tree_string.newick with 1693 sequences
+It took 14.71 seconds from start to finish.
+The program finished at 12:48:20.
+The reference database ScandiFish_2025-06-24_1.fasta has successfully been created!
 ##############################################################################
 
 
 
-The command used to run the script was: python Echopipe_additional_evaluation.py Amphibians_2025-06-24_1.fasta Database_curation/2025-06-24_1/Curated_content/2025-06-24_1_post_curation_monophyletic_group.txt -f ACACCGCCCGTCACCCT -r GTAYACTTACCATGTTACGACTT
+The command used to run the script was: python Echopipe_additional_evaluation.py ScandiFish_2025-06-24_1.fasta Database_curation/2025-06-24_1/Curated_content/2025-06-24_1_post_curation_monophyletic_group.txt -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG
 
 Primer compatibility check has been performed. Please review the relevant files.
 
-It took 0.87 seconds from start to finish.
-The program finished at 10:07:43.
+It took 28.24 seconds from start to finish.
+The program finished at 12:49:59.
 
 Thanks for using EchoPipe
 
