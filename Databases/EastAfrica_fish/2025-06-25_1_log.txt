@@ -1,0 +1,520 @@
+-----------------------------------------------------------------------------------------------------------------------------
+Thanks for using EchoPipe, an iterative pipeline to create, curate and evaluate your reference database for environmental DNA studies
+For more information see the GitHub repository: https://github.com/EivindStensrud/EchoPipe/tree/main
+
+The command used to run the script was: python Echopipe_reference_template.py Fish_names_EA.txt -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -l 1000 -e eivind@ednasolutions.se -t 170 -m 5 -q AND 12S -a 5538bd02e0d704e3416263ad4d51c74b7608
+ 
+Reference_template_creation was conducted with the following settings:
+Initated at: 2025-06-25 11:10:27
+Input file: Fish_names_EA.txt
+Forward primer: 5'-GTCGGTAAAACTCGTGCCAGC-3'
+Reverse primer: 5'-CATAGTGGGGTATCTAATCCCAGTTTG-3'
+Minimum sequence length: 170
+Maximum sequence length: 1000
+Maximum amplicon cutoff multiplier: 2
+Email address: eivind@ednasolutions.se
+API key: 5538bd02e0d704e3416263ad4d51c74b7608
+The amount of sequences downloaded per species: 5
+
+Custom query: AND 12S
+Search term: [Organism] AND ("170"[SLEN] : "1000"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" AND 12S
+A draft of the reference template database has been created.
+Make sure to review Reference_template_creation/aligned_sequences_to_curate.fasta before finalizing it to a reference template database with -C (--Complete).
+Finished at: 2025-06-25 11:13:21
+
+It took 174.03 seconds to run the program.
+
+##############################################################################
+
+
+The command used to run the script was: python Echopipe_reference_template.py Fish_names_EA.txt -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608 -C
+
+
+Reference_template_creation was completed by using the -C option:
+Initiated at: 2025-06-25 11:15:05
+Finished at: 2025-06-25 11:15:05
+
+It took 0.0 seconds to run the program.
+
+##############################################################################
+The command used to run the script was: python Echopipe_database_creation.py Fish_names_EA.txt reference_template_database.fasta -e eivind@ednasolutions.se -a 5538bd02e0d704e3416263ad4d51c74b7608
+
+
+Reference database was created with the following settings:
+This log file contains information from the run 2025-06-25_1 at 11:16:17.
+
+------------------------------------------------------------------------------
+
+The script was run with the following settings:
+Input file: Fish_names_EA.txt
+Input reference database: reference_template_database.fasta
+Email address: eivind@ednasolutions.se
+API key: 5538bd02e0d704e3416263ad4d51c74b7608
+Date: 2025-06-25
+Sorted by largest sequence lengths: False
+Maximum accession number per species: 10000
+Minimum amplicon size: 50
+Search term: [Organism] AND biomol_genomic[PROP] AND ("50"[SLEN] : "22000"[SLEN])
+
+--------------------------------------------------------------------------
+
+Template database creation completed successfully in directory: Template_databases/reference_template_database
+
+--------------------------------------------------------------------------
+
+Species information download is starting...
+
+Species information download is finished! No errors detected.
+It took 104.08 seconds to finish.
+
+--------------------------------------------------------------------------
+
+
+Non-valid species name found. See Log_files/2025-06-25_1_species_not_found.txt
+Duplicate species name found. See Log_files/2025-06-25_1_duplicate_species_entries.txt
+The following species had sequences on NCBI. See Log_files/2025-06-25_1_species_found.txt
+Accession number download is starting...
+
+Accession number download is finished! No errors detected.
+It took 118.32 seconds to finish.
+
+--------------------------------------------------------------------------
+
+
+Note: Not all sequences were downloaded for one or more species since --maxcount (10000) < available accession numbers. See 2025-06-25_1_over_max.csv
+Suggestion: Run program again with 2025-06-25_1_over_max.csv as input after database curation.
+Make sure to adjust parameters such as --maxcount and/or --sort by sequence length.
+
+315 out of 331 species have new accession numbers.
+
+--------------------------------------------------------------------------
+
+
+Sequence download is starting...
+
+Sequence download is finished! No errors detected.
+It took 210.77 seconds to finish.
+
+--------------------------------------------------------------------------
+
+
+BLAST extraction is starting...
+However, these species had no BLAST results from their sequences:
+Aliteranodon stuhlmanni
+However, these species had no BLAST results from their sequences:
+Alestes dentex
+However, these species had no BLAST results from their sequences:
+Alestes baremoze
+However, these species had no BLAST results from their sequences:
+Afronemacheilus abyssinicus
+However, these species had no BLAST results from their sequences:
+Amphilius grandis
+However, these species had no BLAST results from their sequences:
+Amphilius krefftii
+However, these species had no BLAST results from their sequences:
+Andersonia leptura
+However, these species had no BLAST results from their sequences:
+Amphilius lampei
+However, these species had no BLAST results from their sequences:
+Amphilius uranoscopus
+However, these species had no BLAST results from their sequences:
+Aphaniops stiassnyae
+However, these species had no BLAST results from their sequences:
+Aphaniops stiassnyae
+However, these species had no BLAST results from their sequences:
+Aphanius dispar
+However, these species had no BLAST results from their sequences:
+Aphanius dispar
+However, these species had no BLAST results from their sequences:
+Astatoreochromis alluaudi
+However, these species had no BLAST results from their sequences:
+Auchenoglanis biscutatus
+However, these species had no BLAST results from their sequences:
+Barbus ethiopicus
+However, these species had no BLAST results from their sequences:
+Brachyalestes sadleri
+However, these species had no BLAST results from their sequences:
+Brycinus macrolepidotus
+However, these species had no BLAST results from their sequences:
+Brycinus nurse
+However, these species had no BLAST results from their sequences:
+Chelaethiops bibie
+However, these species had no BLAST results from their sequences:
+Chiloglanis brevibarbis
+However, these species had no BLAST results from their sequences:
+Chiloglanis deckenii
+However, these species had no BLAST results from their sequences:
+Chiloglanis niloticus
+However, these species had no BLAST results from their sequences:
+Chiloglanis somereni
+However, these species had no BLAST results from their sequences:
+Chrysichthys auratus
+However, these species had no BLAST results from their sequences:
+Citharinus citharus
+However, these species had no BLAST results from their sequences:
+Clariallabes petricola
+However, these species had no BLAST results from their sequences:
+Clarias alluaudi
+However, these species had no BLAST results from their sequences:
+Clarias anguillaris
+However, these species had no BLAST results from their sequences:
+Clarias werneri
+However, these species had no BLAST results from their sequences:
+Clarias liocephalus
+However, these species had no BLAST results from their sequences:
+Clarotes laticeps
+However, these species had no BLAST results from their sequences:
+Ctenochromis pectoralis
+However, these species had no BLAST results from their sequences:
+Ctenopoma petherici
+However, these species had no BLAST results from their sequences:
+Cyphomyrus grahami
+However, these species had no BLAST results from their sequences:
+Danakilia dinicolai
+However, these species had no BLAST results from their sequences:
+Danakilia franchettii
+However, these species had no BLAST results from their sequences:
+Distichodus engycephalus
+However, these species had no BLAST results from their sequences:
+Distichodus nefasch
+However, these species had no BLAST results from their sequences:
+Distichodus rostratus
+However, these species had no BLAST results from their sequences:
+Enterochromis cinctus
+However, these species had no BLAST results from their sequences:
+Enteromius akakianus
+However, these species had no BLAST results from their sequences:
+Enteromius alberti
+However, these species had no BLAST results from their sequences:
+Enteromius anema
+However, these species had no BLAST results from their sequences:
+Enteromius baleensis
+However, these species had no BLAST results from their sequences:
+Enteromius humilis
+However, these species had no BLAST results from their sequences:
+Enteromius jacksoni
+However, these species had no BLAST results from their sequences:
+Enteromius laticeps
+However, these species had no BLAST results from their sequences:
+Enteromius leonensis
+However, these species had no BLAST results from their sequences:
+Enteromius macrops
+However, these species had no BLAST results from their sequences:
+Enteromius neumayeri
+However, these species had no BLAST results from their sequences:
+Enteromius nyanzae
+However, these species had no BLAST results from their sequences:
+Enteromius perince
+However, these species had no BLAST results from their sequences:
+Enteromius pleurogramma
+However, these species had no BLAST results from their sequences:
+Enteromius stigmatopygus
+However, these species had no BLAST results from their sequences:
+Enteromius tanapelagius
+However, these species had no BLAST results from their sequences:
+Enteromius trispilopleura
+However, these species had no BLAST results from their sequences:
+Enteromius yardiensis
+However, these species had no BLAST results from their sequences:
+Enteromius yongei
+However, these species had no BLAST results from their sequences:
+Epiplatys bifasciatus
+However, these species had no BLAST results from their sequences:
+Garra aethiopica
+However, these species had no BLAST results from their sequences:
+Garra andruzzii
+However, these species had no BLAST results from their sequences:
+Garra dembecha
+However, these species had no BLAST results from their sequences:
+Garra hindii
+However, these species had no BLAST results from their sequences:
+Garra jamila
+However, these species had no BLAST results from their sequences:
+Garra napata
+However, these species had no BLAST results from their sequences:
+Garra regressus
+However, these species had no BLAST results from their sequences:
+Garra sannarensis
+However, these species had no BLAST results from their sequences:
+Garra tana
+However, these species had no BLAST results from their sequences:
+Garra vinciguerrae
+However, these species had no BLAST results from their sequences:
+Haplochromis brownae
+However, these species had no BLAST results from their sequences:
+Haplochromis chilotes
+However, these species had no BLAST results from their sequences:
+Haplochromis hiatus
+However, these species had no BLAST results from their sequences:
+Haplochromis iris
+However, these species had no BLAST results from their sequences:
+Haplochromis degeni
+However, these species had no BLAST results from their sequences:
+Haplochromis ishmaeli
+However, these species had no BLAST results from their sequences:
+Haplochromis lividus
+However, these species had no BLAST results from their sequences:
+Haplochromis nubilus
+However, these species had no BLAST results from their sequences:
+Haplochromis laparogramma
+However, these species had no BLAST results from their sequences:
+Haplochromis obliquidens
+However, these species had no BLAST results from their sequences:
+Haplochromis piceatus
+However, these species had no BLAST results from their sequences:
+Haplochromis plagiodon
+However, these species had no BLAST results from their sequences:
+Haplochromis rudolfianus
+However, these species had no BLAST results from their sequences:
+Haplochromis xenognathus
+However, these species had no BLAST results from their sequences:
+Haplochromis sauvagei
+However, these species had no BLAST results from their sequences:
+Haplochromis pyrrhocephalus
+However, these species had no BLAST results from their sequences:
+Heterobranchus bidorsalis
+However, these species had no BLAST results from their sequences:
+Heterobranchus longifilis
+However, these species had no BLAST results from their sequences:
+Hippopotamyrus pictus
+However, these species had no BLAST results from their sequences:
+Hydrocynus brevis
+However, these species had no BLAST results from their sequences:
+Hydrocynus forskahlii
+However, these species had no BLAST results from their sequences:
+Kribia nana
+However, these species had no BLAST results from their sequences:
+Labeo forskalii
+However, these species had no BLAST results from their sequences:
+Labeo horie
+However, these species had no BLAST results from their sequences:
+Labeo victorianus
+However, these species had no BLAST results from their sequences:
+Labeo vulgaris
+However, these species had no BLAST results from their sequences:
+Labeobarbus acutirostris
+However, these species had no BLAST results from their sequences:
+Labeobarbus brevicephalus
+However, these species had no BLAST results from their sequences:
+Labeobarbus beso
+However, these species had no BLAST results from their sequences:
+Labeobarbus bynni
+However, these species had no BLAST results from their sequences:
+Labeobarbus altianalis
+However, these species had no BLAST results from their sequences:
+Labeobarbus crassibarbis
+However, these species had no BLAST results from their sequences:
+Labeobarbus dainellii
+However, these species had no BLAST results from their sequences:
+Labeobarbus gorgorensis
+However, these species had no BLAST results from their sequences:
+Labeobarbus gorguari
+However, these species had no BLAST results from their sequences:
+Labeobarbus gananensis
+However, these species had no BLAST results from their sequences:
+Labeobarbus jubae
+However, these species had no BLAST results from their sequences:
+Labeobarbus longissimus
+However, these species had no BLAST results from their sequences:
+Labeobarbus macrophtalmus
+However, these species had no BLAST results from their sequences:
+Labeobarbus megastoma
+However, these species had no BLAST results from their sequences:
+Labeobarbus nedgia
+However, these species had no BLAST results from their sequences:
+Labeobarbus platydorsus
+However, these species had no BLAST results from their sequences:
+Labeobarbus surkis
+However, these species had no BLAST results from their sequences:
+Labeobarbus truttiformis
+However, these species had no BLAST results from their sequences:
+Labeobarbus tsanensis
+However, these species had no BLAST results from their sequences:
+Lacustricola hutereaui
+However, these species had no BLAST results from their sequences:
+Leptocypris niloticus
+However, these species had no BLAST results from their sequences:
+Lipochromis cryptodon
+However, these species had no BLAST results from their sequences:
+Lipochromis maxillaris
+However, these species had no BLAST results from their sequences:
+Lipochromis melanopterus
+However, these species had no BLAST results from their sequences:
+Lipochromis obesus
+However, these species had no BLAST results from their sequences:
+Malapterurus minjiriya
+However, these species had no BLAST results from their sequences:
+Marcusenius cyprinoides
+However, these species had no BLAST results from their sequences:
+Marcusenius devosi
+However, these species had no BLAST results from their sequences:
+Microctenopoma uelense
+However, these species had no BLAST results from their sequences:
+Micropanchax kingii
+However, these species had no BLAST results from their sequences:
+Mochokus niloticus
+However, these species had no BLAST results from their sequences:
+Mormyrus kannume
+However, these species had no BLAST results from their sequences:
+Neobola bottegoi
+However, these species had no BLAST results from their sequences:
+Neobola kinondo
+However, these species had no BLAST results from their sequences:
+Neochromis nigricans
+However, these species had no BLAST results from their sequences:
+Neolebias trewavasae
+However, these species had no BLAST results from their sequences:
+Nothobranchius bojiensis
+However, these species had no BLAST results from their sequences:
+Nothobranchius derhami
+However, these species had no BLAST results from their sequences:
+Nothobranchius elongatus
+However, these species had no BLAST results from their sequences:
+Nothobranchius fasciatus
+However, these species had no BLAST results from their sequences:
+Nothobranchius interruptus
+However, these species had no BLAST results from their sequences:
+Nothobranchius janpapi
+However, these species had no BLAST results from their sequences:
+Nothobranchius jubbi
+However, these species had no BLAST results from their sequences:
+Nothobranchius lourensi
+However, these species had no BLAST results from their sequences:
+Nothobranchius melanospilus
+However, these species had no BLAST results from their sequences:
+Nothobranchius microlepis
+However, these species had no BLAST results from their sequences:
+Nothobranchius palmqvisti
+However, these species had no BLAST results from their sequences:
+Nothobranchius patrizii
+However, these species had no BLAST results from their sequences:
+Nothobranchius robustus
+However, these species had no BLAST results from their sequences:
+Nothobranchius rubroreticulatus
+However, these species had no BLAST results from their sequences:
+Nothobranchius steinforti
+However, these species had no BLAST results from their sequences:
+Nothobranchius ugandensis
+However, these species had no BLAST results from their sequences:
+Nothobranchius virgatus
+However, these species had no BLAST results from their sequences:
+Oreochromis alcalicus
+However, these species had no BLAST results from their sequences:
+Oreochromis hunteri
+However, these species had no BLAST results from their sequences:
+Oreochromis jipe
+However, these species had no BLAST results from their sequences:
+Oreochromis korogwe
+However, these species had no BLAST results from their sequences:
+Oreochromis leucostictus
+However, these species had no BLAST results from their sequences:
+Oreochromis spilurus
+However, these species had no BLAST results from their sequences:
+Paradistichodus dimidiatus
+However, these species had no BLAST results from their sequences:
+Parachanna obscura
+However, these species had no BLAST results from their sequences:
+Parailia pellucida
+However, these species had no BLAST results from their sequences:
+Plicofollis dussumieri
+However, these species had no BLAST results from their sequences:
+Pollimyrus isidori
+However, these species had no BLAST results from their sequences:
+Pollimyrus nigricans
+However, these species had no BLAST results from their sequences:
+Pollimyrus petherici
+However, these species had no BLAST results from their sequences:
+Prognathochromis dentex
+However, these species had no BLAST results from their sequences:
+Prognathochromis longirostris
+However, these species had no BLAST results from their sequences:
+Prognathochromis paraguiarti
+However, these species had no BLAST results from their sequences:
+Protopterus amphibius
+However, these species had no BLAST results from their sequences:
+Psammochromis riponianus
+However, these species had no BLAST results from their sequences:
+Pseudocrenilabrus multicolor
+However, these species had no BLAST results from their sequences:
+Rastrineobola argentea
+However, these species had no BLAST results from their sequences:
+Scatophagus tetracanthus
+However, these species had no BLAST results from their sequences:
+Stenogobius gymnopomus
+However, these species had no BLAST results from their sequences:
+Synodontis afrofischeri
+However, these species had no BLAST results from their sequences:
+Synodontis caudovittatus
+However, these species had no BLAST results from their sequences:
+Synodontis eupterus
+However, these species had no BLAST results from their sequences:
+Synodontis filamentosus
+However, these species had no BLAST results from their sequences:
+Synodontis frontosus
+However, these species had no BLAST results from their sequences:
+Synodontis khartoumensis
+However, these species had no BLAST results from their sequences:
+Synodontis nigrita
+However, these species had no BLAST results from their sequences:
+Synodontis serratus
+However, these species had no BLAST results from their sequences:
+Synodontis sorex
+However, these species had no BLAST results from their sequences:
+Synodontis victoriae
+However, these species had no BLAST results from their sequences:
+Thoracochromis wingatii
+However, these species had no BLAST results from their sequences:
+Xystichromis phytophagus
+However, these species had no BLAST results from their sequences:
+Yssichromis fusiformis
+
+BLAST extraction is finished! No errors detected.
+It took 47.59 seconds to finish.
+
+--------------------------------------------------------------------------
+
+
+
+
+New sequence(s) found! BLAST_results/2025-06-25_1_to_curate.fasta is ready to be curated.
+
+Echopipe_database_creation.py
+The program finished at 11:24:19.
+It took 481.38 seconds from start to finish.
+
+##############################################################################
+
+
+
+The command used to run the script was: python Echopipe_database_curation.py BLAST_results/2025-06-25_1_to_curate.fasta
+
+Align with MAFFT linsi using 429 sequencesRunning FastTree with standard settings, input: 2025-06-25_1_aligned.fasta and output: 2025-06-25_1_tree_string.newick with 429 sequences
+Echopipe_database_creation.py
+It took 25.99 seconds from start to finish.
+The program finished at 11:25:38.
+##############################################################################
+
+
+
+The command used to run the script was: python Echopipe_database_completion.py -b BLAST_results/2025-06-25_1_to_curate.fasta -c Database_curation/2025-06-25_1/2025-06-25_1_aligned.fasta -u East_african_fishdatabase250625_1.fasta
+
+Align with MAFFT linsi using 413 sequences
+Running FastTree with standard settings, input: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/East_african_fish250625/Database_curation/2025-06-25_1/Curated_content/aligned_East_african_fishdatabase250625_1.fasta and output: /home/eivisten/eDNA/Database/EchoPipe_Official/Publication_250528/East_african_fish250625/Database_curation/2025-06-25_1/Curated_content/2025-06-25_1_curated_tree_string.newick with 413 sequences
+It took 16.72 seconds from start to finish.
+The program finished at 13:06:14.
+The reference database East_african_fishdatabase250625_1.fasta has successfully been created!
+##############################################################################
+
+
+
+The command used to run the script was: python Echopipe_additional_evaluation.py East_african_fishdatabase250625_1.fasta Database_curation/2025-06-25_1/Curated_content/2025-06-25_1_post_curation_monophyletic_group.txt -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG
+
+Primer compatibility check has been performed. Please review the relevant files.
+
+It took 1.63 seconds from start to finish.
+The program finished at 13:07:46.
+
+Thanks for using EchoPipe
+
+.##############################################################################
+
