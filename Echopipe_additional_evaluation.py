@@ -3,6 +3,13 @@
 ### This program is intended for creating dataframes to further assist with the evaluation of the reference database.
 
 
+import warnings
+from Bio import BiopythonDeprecationWarning
+# Suppress the specific Biopython deprecation warnings
+warnings.simplefilter('ignore', BiopythonDeprecationWarning)
+warnings.simplefilter('ignore', FutureWarning)
+
+
 from Bio.Align.Applications import MafftCommandline
 from Bio import SeqIO
 from Bio.Align import PairwiseAligner
@@ -16,40 +23,16 @@ import pandas as pd
 import os
 import tempfile
 import argparse
+import pathlib
+from datetime import datetime # So that we can get the current day's date.
+import time # In order to add delays, so that servers are not put under much strain (and if one would like to see how long it takes for the code to execute).
+import sys
+
+
 
 
 ###
-###
-###
-
-parser = argparse.ArgumentParser(
-    prog="EchoPipe - Additional evaluation",
-    description="Provides additional dataframes from the reference database, with the option to also view primer compatibility - either one or both directions at the same time.",
-    epilog="Version 1.0")
-
-parser.add_argument('reference_database', type=str,
-    help="The path to the reference database that the dataframes are going to be based on.")
-parser.add_argument('monophyletic_group', type=str,
-    help="The path to the text file containing the monophyletic groups that was generated when the reference database was completed.")
-parser.add_argument('-f', '--forward_primer', type=str, default=None,
-    help="The forward primer that wishes to be checked against the reference database's sequence (5'-3' orientation).")
-parser.add_argument('-r', '--reverse_primer', type=str, default=None,
-    help="The reverse primer that wishes to be checked against the reference database's sequence (5'-3' orientation).")
-
-args = parser.parse_args()
-
-reference_database = os.path.abspath(args.reference_database)
-monophyletic_group = os.path.abspath(args.monophyletic_group)
-database_name = os.path.splitext(args.reference_database)[0]
-evaluation_directory = os.path.join("Evaluation", database_name)
-forward_primer = args.forward_primer
-reverse_primer = args.reverse_primer
-
-os.makedirs(evaluation_directory, exist_ok=True)
-os.chdir(evaluation_directory)
-
-###
-###
+### defs
 ###
 
 def find_duplicates(reference_database):
@@ -82,31 +65,57 @@ def find_duplicates(reference_database):
 def get_positions(sequence_input):
     return list(range(len(sequence_input)))
 
+
+#degenerate bases
+degenerate_base_matches = {
+    'A': {'A'},
+    'C': {'C'},
+    'G': {'G'},
+    'T': {'T'},
+    'R': {'A', 'G'},
+    'Y': {'C', 'T'}, 
+    'S': {'G', 'C'},
+    'W': {'A', 'T'},
+    'K': {'G', 'T'},
+    'M': {'A', 'C'},
+    'B': {'C', 'G', 'T'},
+    'D': {'A', 'G', 'T'},
+    'H': {'A', 'C', 'T'},
+    'V': {'A', 'C', 'G'},
+    'N': {'A', 'C', 'G', 'T'},
+    'I': {'A', 'C', 'G', 'T'}
+
+     }
+
 # Shows if there is a mismatch at a particular position.
 def positions_to_check(mode, positions, aligned_primer, aligned_sequence, record_result):
+
     number_of_mismatches = 0
-    length = len(positions)
     mismatch_details = []
 
     number_of_mismatches_mode = f"{mode}_number_of_mismatches"
     mismatches_mode = f"{mode}_mismatches"
     
     for pos in positions:
-        if pos < length:
-            sequence_char = aligned_sequence[pos]
-            primer_char = aligned_primer[pos]
-            if sequence_char != primer_char:
-                number_of_mismatches += 1
-                bad_position = length - pos 
-                mismatch_details.append((bad_position, primer_char, sequence_char))
-        else:
-            print(f"Position {pos+1} is out of bounds for the aligned sequences.")
+        sequence_char = aligned_sequence[pos]
+        primer_char = aligned_primer[pos]
 
+        # Check regular or degenerate character matches
+        if sequence_char != primer_char:
+            if primer_char in degenerate_base_matches and sequence_char in degenerate_base_matches[primer_char]:
+                continue  # Continue as a match
+            else:
+                number_of_mismatches += 1
+                bad_position = len(positions) - pos 
+                mismatch_details.append((bad_position, primer_char, sequence_char))
+
+    # Store results
     record_result[number_of_mismatches_mode] = number_of_mismatches
     if mismatch_details:
         record_result[mismatches_mode] = mismatch_details
     else:
         record_result[mismatches_mode] = "NA"
+
 
 # Align the primer with the sequence and check for mismatches.
 def primer_alignment(mode, primer_sequence, sequence_to_align, record_result):
@@ -126,8 +135,8 @@ def primer_alignment(mode, primer_sequence, sequence_to_align, record_result):
     primer_length = len(primer_sequence)
 
     max_score = aligner.match * primer_length
-    score_cutoff = max_score * 0.5
-    length_cutoff = primer_length * 1.3
+    score_cutoff = max_score * 0.2
+    length_cutoff = primer_length * 1.2
 
     sequence_key = f"{mode}_sequence"
     
@@ -167,8 +176,13 @@ def check_mismatches(mismatches, position_checks, mismatch_sets):
     for item in mismatches:
         if isinstance(item, tuple):
             position, primer_char, sequence_char = item
-            if position in position_checks and (primer_char, sequence_char) in mismatch_sets:
-                return True
+            if position in position_checks:
+                # Check mismatches considering degenerate bases
+                if primer_char in degenerate_base_matches and sequence_char in degenerate_base_matches[primer_char]:
+                    # This is a match due to degeneracy compatibility
+                    continue
+                elif (primer_char, sequence_char) in mismatch_sets:
+                    return True
     return False
 
 # Checks if there are any gaps in either the primer or in the sequence. May be wise to introduce additional parameters to it in order to make it more strict.
@@ -253,10 +267,7 @@ def multiple_sequence_alignment(df, mode): # mode is either forward_sequence or 
     # Create MAFFT command line instance
     mafft_cline = MafftCommandline(
         input=temp_input_path,
-        localpair=True,
-        maxiterate=1000,
-        thread=4,
-        reorder=True
+        auto=True
     )
     
     # Run MAFFT alignment
@@ -274,6 +285,7 @@ def omega_function(df, mode, primer): # Name it something appropriately.
     multiple_sequence_alignment(df, mode) # Creates the sequence alignments.
     df = df[mode]
     sequences = [sequence for sequence in df if sequence != "NA"]
+    print(sequences)
     max_len = max(len(seq) for seq in sequences) # Gives us the longest sequence from the df. Include ones with gaps introduced.
     padded_sequences = [seq.ljust(max_len, '-') for seq in sequences] # Add gaps at the end of sequences that are shorter than max_len to ensure functionality downstreams.
     adjusted_primer = primer.ljust(max_len, '-')
@@ -299,13 +311,20 @@ def omega_function(df, mode, primer): # Name it something appropriately.
         proportions.append(proportion)
         most_common_seq.append(freq.most_common()[0][0])
 
-    # Convert proportions to a dataframe.
-    proportions_df = pd.DataFrame(proportions).fillna(0) # Fill NaN with 0.
+    proportions_df = pd.DataFrame(proportions).fillna(0)
+
     nucleotide_order = ['A', 'C', 'G', 'T', '-']
+    # Ensure all columns exist
+    for col in nucleotide_order:
+        if col not in proportions_df.columns:
+            proportions_df[col] = 0
     proportions_df = proportions_df[nucleotide_order]
 
-    # Makes a csv file displaying the occurrences of each nucleotide at each position relative to the consenus primer.
+    # Makes a csv file displaying the occurrences of each nucleotide
     df_to_transpose = pd.DataFrame(frequencies).fillna(0).astype(int)
+    for col in nucleotide_order:
+        if col not in df_to_transpose.columns:
+            df_to_transpose[col] = 0
     df_to_transpose = df_to_transpose[nucleotide_order]
 
     df_transposed = df_to_transpose.T
@@ -315,380 +334,510 @@ def omega_function(df, mode, primer): # Name it something appropriately.
     nucleotide_proportions_diagram(proportions_df, mode) # Creates the diagrams.
     proportions_table(df_transposed, mode, padded_primer) # Creates the tables.
 
-###
-###
-###
+def append_and_print_message(log_file, msg):
+    with open(log_file, "a") as file:
+        file.write(msg)
+    print(msg)
 
-with open(monophyletic_group, "r") as file:
-    monophyletic_list = file.readlines()
-monophyletic_list = [line.strip() for line in monophyletic_list]
+def get_log_file_name(logs_dir):
+    """Generate a unique log file name based on the latest date in the counter file and the counter."""
+    # Ensure the logs directory exists
+    os.makedirs(logs_dir, exist_ok=True)
 
-duplicate_sequences = find_duplicates(reference_database)
+    # Path to the counter file
+    counter_file = os.path.join(logs_dir, "run_counters.txt")
+    
+    # Find the latest date with an entry in the counter file
+    latest_date = None
+    if os.path.exists(counter_file):
+        with open(counter_file, "r") as f:
+            lines = f.read().strip().splitlines()
+            if lines:
+                latest_date = max(line.split(':')[0] for line in lines)
+    
+    if latest_date is None:
+        # If there is no date in the file, use today's date
+        latest_date = datetime.today().strftime('%Y-%m-%d')
 
+    # Read the current counter for this date
+    counter = read_counter(counter_file, latest_date)
+    
+    # Formulate the run name
+    run_name = f"{latest_date}_{counter}"
+    log_file_path = os.path.join(logs_dir, f"{run_name}_log.txt")
+    log_file_path = os.path.abspath(log_file_path)
 
-# Dataframe for the species summary.
-dataframe_one_dictionary = {'superkingdom': [],
-                        'phylum': [],
-                        'class': [],
-                        'order': [],
-                        'family': [],
-                        'genus': [],
-                        'species': [],
-                        'monophyletic': [],
-                        'species_sequences': [],
-                        'total_count': [],
-                        'duplicate_sequences': [],
-                        'average_gc_content': [],
-                        'lowest_gc_content': [],
-                        'highest_gc_content': []
-                       }
+    
+    return log_file_path, run_name
 
-# Dataframe for the sequence summary.
-dataframe_two_dictionary = {'superkingdom': [],
-                        'phylum': [],
-                        'class': [],
-                        'order': [],
-                        'family': [],
-                        'genus': [],
-                        'species': [],
-                        'accession_number': [],
-                        'sequence': [],
-                        'count': [],
-                        'length': [],
-                        'gc_content': []
-                        }
+def get_command_string():
+    command_string = ' '.join(sys.argv)
+    return command_string
 
-lineage_keys = ['superkingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
-
-species_gc_content = {}
-family_gc_content = {}
-
-for record in SeqIO.parse(reference_database, "fasta"):
-    split_header = record.id.split("|")
-    lineage = split_header[2].split(";")
-    species = lineage[6]
-    family = lineage[4]
-    accession = split_header[1]
-    counter = int(split_header[3])
-    gc_content = gc_fraction(record.seq) * 100
-
-    if species not in species_gc_content:
-        species_gc_content[species] = []
-    species_gc_content[species].append(gc_content)
-
-    if family not in family_gc_content:
-        family_gc_content[family] = []
-    family_gc_content[family].append(gc_content)
+#Read the counter value for the current date from the counter file. To have version control.
+def read_counter(counter_file, date):
+    try:
+        if os.path.exists(counter_file):
+            with open(counter_file, "r") as f:
+                data = f.read().strip()
+                # Parse the counter values
+                counters = dict(line.split(":") for line in data.splitlines())
+                # Return the counter for the current date, or 0 if not found
+                return int(counters.get(date, 0))
+    except Exception as e:
+        print(f"Error reading the counter file: {e}")
+    # Default to counter 0 if file doesn't exist or error occurs
+    return 0
 
 
-    if species not in dataframe_one_dictionary['species']:
-        duplicate_sequence_number = 0
-        for entries in duplicate_sequences.values():
-            for entry in entries:
-                if lineage[6] in entry:
-                    duplicate_sequence_number += 1
+
+def main():
+
+
+    parser = argparse.ArgumentParser(
+        prog="EchoPipe - Additional evaluation",
+        description="Provides additional dataframes from the reference database, with the option to also view primer compatibility - either one or both directions at the same time.",
+        epilog="Version 1.0")
+
+    parser.add_argument('reference_database', type=str,
+        help="The path to the reference database that the dataframes are going to be based on.")
+    parser.add_argument('monophyletic_group', type=str,
+        help="The path to the text file containing the monophyletic groups that was generated when the reference database was completed.")
+    parser.add_argument('-f', '--forward_primer', type=str, default=None,
+        help="The forward primer that wishes to be checked against the reference database's sequence (5'-3' orientation).")
+    parser.add_argument('-r', '--reverse_primer', type=str, default=None,
+        help="The reverse primer that wishes to be checked against the reference database's sequence (5'-3' orientation).")
+
+    args = parser.parse_args()
+
+    command_string = get_command_string()
+
+
+    program_timer = time.time()
+
+    reference_database = os.path.abspath(args.reference_database)
+    monophyletic_group = os.path.abspath(args.monophyletic_group)
+    database_name = os.path.splitext(args.reference_database)[0]
+    evaluation_directory = os.path.join("Evaluation", database_name)
+    forward_primer = args.forward_primer
+    reverse_primer = args.reverse_primer
+
+    logs_dir = "Log_files/"
+    log_file, run_name = get_log_file_name(logs_dir)
+
+
+    os.makedirs(evaluation_directory, exist_ok=True)
+    os.chdir(evaluation_directory)
+
+    append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n\n")
+
+    
+
+    ###
+
+    with open(monophyletic_group, "r") as file:
+        monophyletic_list = file.readlines()
+    monophyletic_list = [line.strip() for line in monophyletic_list]
+
+    duplicate_sequences = find_duplicates(reference_database)
+
+
+    # Dataframe for the species summary.
+    dataframe_one_dictionary = {'domain': [],
+                            'phylum': [],
+                            'class': [],
+                            'order': [],
+                            'family': [],
+                            'genus': [],
+                            'species': [],
+                            'monophyletic': [],
+                            'species_sequences': [],
+                            'total_count': [],
+                            'duplicate_sequences': [],
+                            'average_gc_content': [],
+                            'lowest_gc_content': [],
+                            'highest_gc_content': []
+                           }
+
+    # Dataframe for the sequence summary.
+    dataframe_two_dictionary = {'domain': [],
+                            'phylum': [],
+                            'class': [],
+                            'order': [],
+                            'family': [],
+                            'genus': [],
+                            'species': [],
+                            'accession_number': [],
+                            'sequence': [],
+                            'count': [],
+                            'length': [],
+                            'gc_content': []
+                            }
+
+    lineage_keys = ['domain', 'phylum', 'class', 'order', 'family', 'genus', 'species']
+
+    species_gc_content = {}
+    family_gc_content = {}
+
+    species = "NA"
+    family = "NA"
+    accession = "NA"
+    counter = "NA"
+    
+    for record in SeqIO.parse(reference_database, "fasta"):
+        split_header = record.id.split("|")
+        lineage = split_header[2].split(";")
+        species = lineage[6]
+        family = lineage[4]
+        accession = split_header[1]
+        counter = int(split_header[3])
+        gc_content = gc_fraction(record.seq) * 100
+
+        if species not in species_gc_content:
+            species_gc_content[species] = []
+        species_gc_content[species].append(gc_content)
+
+        if family not in family_gc_content:
+            family_gc_content[family] = []
+        family_gc_content[family].append(gc_content)
+
+
+        if species not in dataframe_one_dictionary['species']:
+            duplicate_sequence_number = 0
+            for entries in duplicate_sequences.values():
+                for entry in entries:
+                    if lineage[6] in entry:
+                        duplicate_sequence_number += 1
+
+            for key, lineage_value in zip(lineage_keys, lineage):
+                dataframe_one_dictionary[key].append(lineage_value)
+
+            dataframe_one_dictionary['monophyletic'].append("Yes" if species.replace('_', ' ') in monophyletic_list else "No")
+            dataframe_one_dictionary['species_sequences'].append(1)
+            dataframe_one_dictionary['total_count'].append(counter)
+            dataframe_one_dictionary['duplicate_sequences'].append(duplicate_sequence_number)
+        else:
+            index = dataframe_one_dictionary['species'].index(species)
+            dataframe_one_dictionary['total_count'][index] += counter
+            dataframe_one_dictionary['species_sequences'][index] += 1
 
         for key, lineage_value in zip(lineage_keys, lineage):
-            dataframe_one_dictionary[key].append(lineage_value)
+            dataframe_two_dictionary[key].append(lineage_value)
 
-        dataframe_one_dictionary['monophyletic'].append("Yes" if species.replace('_', ' ') in monophyletic_list else "No")
-        dataframe_one_dictionary['species_sequences'].append(1)
-        dataframe_one_dictionary['total_count'].append(counter)
-        dataframe_one_dictionary['duplicate_sequences'].append(duplicate_sequence_number)
-    else:
-        index = dataframe_one_dictionary['species'].index(species)
-        dataframe_one_dictionary['total_count'][index] += counter
-        dataframe_one_dictionary['species_sequences'][index] += 1
+        dataframe_two_dictionary['accession_number'].append(accession)
+        dataframe_two_dictionary['sequence'].append(record.seq)
+        dataframe_two_dictionary['count'].append(counter)
+        dataframe_two_dictionary['length'].append(len(record.seq))
+        dataframe_two_dictionary['gc_content'].append(round(gc_content, 2))
 
-    for key, lineage_value in zip(lineage_keys, lineage):
-        dataframe_two_dictionary[key].append(lineage_value)
+    # Adds GC-content to the dataframe with species data.
+    for species, species_gc in species_gc_content.items():
+        average_species_gc_content = round(sum(species_gc) / len(species_gc), 2)
+        lowest_species_gc_content = round(min(species_gc), 2)
+        highest_species_gc_content = round(max(species_gc), 2)
+        dataframe_one_dictionary['average_gc_content'].append(average_species_gc_content)   
+        dataframe_one_dictionary['lowest_gc_content'].append(lowest_species_gc_content)   
+        dataframe_one_dictionary['highest_gc_content'].append(highest_species_gc_content)
 
-    dataframe_two_dictionary['accession_number'].append(accession)
-    dataframe_two_dictionary['sequence'].append(record.seq)
-    dataframe_two_dictionary['count'].append(counter)
-    dataframe_two_dictionary['length'].append(len(record.seq))
-    dataframe_two_dictionary['gc_content'].append(round(gc_content, 2))
+    df_one = pd.DataFrame(dataframe_one_dictionary)
+    df_one.to_csv(f"{database_name}_evaluation_species_summary.csv", sep=";", index=False)
 
-# Adds GC-content to the dataframe with species data.
-for species, species_gc in species_gc_content.items():
-    average_species_gc_content = round(sum(species_gc) / len(species_gc), 2)
-    lowest_species_gc_content = round(min(species_gc), 2)
-    highest_species_gc_content = round(max(species_gc), 2)
-    dataframe_one_dictionary['average_gc_content'].append(average_species_gc_content)   
-    dataframe_one_dictionary['lowest_gc_content'].append(lowest_species_gc_content)   
-    dataframe_one_dictionary['highest_gc_content'].append(highest_species_gc_content)
-
-df_one = pd.DataFrame(dataframe_one_dictionary)
-df_one.to_csv(f"{database_name}_evaluation_species_summary.csv", sep=";", index=False)
-
-df_two = pd.DataFrame(dataframe_two_dictionary)
-df_two.to_csv(f"{database_name}_sequence_summary.csv", sep=";", index=False)
+    df_two = pd.DataFrame(dataframe_two_dictionary)
+    df_two.to_csv(f"{database_name}_sequence_summary.csv", sep=";", index=False)
 
 
-# Makes a histogram of the database's GC-content.
-gc_contents = dataframe_two_dictionary['gc_content']
-mean_gc = np.mean(gc_contents)
-median_gc = np.median(gc_contents)
+    # Makes a histogram of the database's GC-content.
+    gc_contents = dataframe_two_dictionary['gc_content']
+    mean_gc = np.mean(gc_contents)
+    median_gc = np.median(gc_contents)
 
-plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 6))
 
-plt.hist(gc_contents, bins=30)
+    plt.hist(gc_contents, bins=30)
 
-plt.axvline(mean_gc, color='b', linestyle='dotted', linewidth=1.5, label=f'Mean: {mean_gc:.2f}%')
-plt.axvline(median_gc, color='r', linestyle='dashed', linewidth=1.5, label=f'Median: {median_gc:.2f}%')
+    plt.axvline(mean_gc, color='b', linestyle='dotted', linewidth=1.5, label=f'Mean: {mean_gc:.2f}%')
+    plt.axvline(median_gc, color='r', linestyle='dashed', linewidth=1.5, label=f'Median: {median_gc:.2f}%')
 
-plt.xlabel('GC-content (%)')
-plt.ylabel('Number of sequences')
-plt.title("The reference database's GC-content distribution")
-plt.grid(axis='y', linestyle='--', linewidth=0.7)
+    plt.xlabel('GC-content (%)')
+    plt.ylabel('Number of sequences')
+    plt.title("The reference database's GC-content distribution")
+    plt.grid(axis='y', linestyle='--', linewidth=0.7)
 
-plt.legend()
-plt.tight_layout()
+    plt.legend()
+    plt.tight_layout()
 
-plt.savefig(f"{database_name}_GC_content_histogram.png")
+    plt.savefig(f"{database_name}_GC_content_histogram.png")
 
-# Convert monophyletic from string to boolean
-df_one['monophyletic'] = df_one['monophyletic'].map({'Yes': True, 'No': False})
+    # Convert monophyletic from string to boolean
+    df_one['monophyletic'] = df_one['monophyletic'].map({'Yes': True, 'No': False})
 
-# Number of unique species per family
-species_per_family = df_one.groupby('family')['species'].nunique().reset_index(name='number_of_species')
+    # Number of unique species per family
+    species_per_family = df_one.groupby('family')['species'].nunique().reset_index(name='number_of_species')
 
-# Number of monophyletic species per family
-monophyletic_species_per_family = df_one[df_one['monophyletic']].groupby('family')['species'].nunique().reset_index(name='number_of_monophyletic_species')
+    # Number of monophyletic species per family
+    monophyletic_species_per_family = df_one[df_one['monophyletic']].groupby('family')['species'].nunique().reset_index(name='number_of_monophyletic_species')
 
-# Merge all the results into a single DataFrame
-result = species_per_family.merge(monophyletic_species_per_family, on='family', how='left')
+    # Merge all the results into a single DataFrame
+    result = species_per_family.merge(monophyletic_species_per_family, on='family', how='left')
 
-# Fill NaN values with 0 in the Number of Monophyletic Species column (in case there are no monophyletic species)
-result['number_of_monophyletic_species'].fillna(0, inplace=True)
-result['number_of_monophyletic_species'] = result['number_of_monophyletic_species'].astype(int)
+    # Fill NaN values with 0 in the Number of Monophyletic Species column (in case there are no monophyletic species)
+    result['number_of_monophyletic_species'].fillna(0, inplace=True)
+    result['number_of_monophyletic_species'] = result['number_of_monophyletic_species'].astype(int)
 
-# Add a new column that gives the number of paraphyletic species based on the total number of species minus the number of monophyletic species.
-result['number_of_paraphyletic_species'] = result['number_of_species'] - result['number_of_monophyletic_species']
+    # Add a new column that gives the number of paraphyletic species based on the total number of species minus the number of monophyletic species.
+    result['number_of_paraphyletic_species'] = result['number_of_species'] - result['number_of_monophyletic_species']
 
-# The dataframe for family summary.
-df_three = result
+    # The dataframe for family summary.
+    df_three = result
 
-reconstructed_dict = {}
+    reconstructed_dict = {}
 
-for sequence, headers in duplicate_sequences.items():
-    for header in headers:
-        family = header.split(';')[-3]
-        reconstructed_dict.setdefault(sequence, []).append(family)
+    for sequence, headers in duplicate_sequences.items():
+        for header in headers:
+            family = header.split(';')[-3]
+            reconstructed_dict.setdefault(sequence, []).append(family)
 
-# Initialize a dictionary to count duplicates for each family
-duplicate_counts = defaultdict(int)
+    # Initialize a dictionary to count duplicates for each family
+    duplicate_counts = defaultdict(int)
 
-# Iterate through the dictionary and count duplicates for each family
-for sequences, families in reconstructed_dict.items():
-    unique_families = set(families)  # Use a set to count each family only once per sequence
-    for family in unique_families:
-        duplicate_counts[family] += 1
+    # Iterate through the dictionary and count duplicates for each family
+    for sequences, families in reconstructed_dict.items():
+        unique_families = set(families)  # Use a set to count each family only once per sequence
+        for family in unique_families:
+            duplicate_counts[family] += 1
 
-# Insert duplicate counts into the dataframe
-df_three['total_duplicate_sequences'] = df_three['family'].map(duplicate_counts).fillna(0).astype(int)
+    # Insert duplicate counts into the dataframe
+    df_three['total_duplicate_sequences'] = df_three['family'].map(duplicate_counts).fillna(0).astype(int)
 
-df_three['average_gc_content'] = None
-df_three['lowest_gc_content'] = None
-df_three['highest_gc_content'] = None
+    df_three['average_gc_content'] = None
+    df_three['lowest_gc_content'] = None
+    df_three['highest_gc_content'] = None
 
 
-# Adds GC-content to the dataframe with family data.
-for family, family_gc in family_gc_content.items():
-    average_family_gc_content = round(sum(family_gc) / len(family_gc), 2)
-    lowest_family_gc_content = round(min(family_gc), 2)
-    highest_family_gc_content = round(max(family_gc), 2)
-    df_three.loc[df_three['family'] == family, 'average_gc_content'] = average_family_gc_content
-    df_three.loc[df_three['family'] == family, 'lowest_gc_content'] = lowest_family_gc_content
-    df_three.loc[df_three['family'] == family, 'highest_gc_content'] = highest_family_gc_content
+    # Adds GC-content to the dataframe with family data.
+    for family, family_gc in family_gc_content.items():
+        average_family_gc_content = round(sum(family_gc) / len(family_gc), 2)
+        lowest_family_gc_content = round(min(family_gc), 2)
+        highest_family_gc_content = round(max(family_gc), 2)
+        df_three.loc[df_three['family'] == family, 'average_gc_content'] = average_family_gc_content
+        df_three.loc[df_three['family'] == family, 'lowest_gc_content'] = lowest_family_gc_content
+        df_three.loc[df_three['family'] == family, 'highest_gc_content'] = highest_family_gc_content
 
-df_three.to_csv(f"{database_name}_evaluation_family_summary.csv", sep=";", index=False)
+    df_three.to_csv(f"{database_name}_evaluation_family_summary.csv", sep=";", index=False)
 
-###
-###
-###
+    ###
+    ###
+    ###
 
-if forward_primer or reverse_primer: # This blocked is skipped entirely if neither -f nor -r is used.
-    if forward_primer:
-        forward_max = int(len(forward_primer) * 1.1)
-    if reverse_primer:
-        reverse_max = int(len(reverse_primer) * 1.1)
+    if forward_primer or reverse_primer: # This blocked is skipped entirely if neither -f nor -r is used.
+        append_and_print_message(log_file, "Primer compatibility check has been performed. Please review the relevant files.\n")
 
-    primer_alignment_results = []
-
-    for record in SeqIO.parse(reference_database, "fasta"):
-        sequence = str(record.seq)
         if forward_primer:
-            forward_sequence = sequence[:forward_max]
-        else:
-            forward_sequence = None
+            forward_max = int(len(forward_primer) * 1.2) # add 20% buffer
         if reverse_primer:
-            reverse_sequence = str(Seq(sequence[-reverse_max:]).reverse_complement())
-        else:
-            reverse_sequence = None
+            reverse_max = int(len(reverse_primer) * 1.2) # add 20% buffer
 
-        lineage = record.id.split("|")[2]
-        species_name = lineage.split(";")[-1]
-        accession_number = record.id.split("|")[1]
-        counter = record.id.split("|")[3]
+        primer_alignment_results = []
 
-        record_result = {
-            'species_lineage': lineage,
-            'species_name': species_name,
-            'accession_number': accession_number,
-            'counter': counter
-        }
-        if forward_primer:
-            record_result.update({
-                'forward_sequence': None,
-                'forward_number_of_mismatches': None,
-                'forward_mismatches': None,
-                'forward_sequence_status': None
-            })
-        if reverse_primer:
-            record_result.update({
-                'reverse_sequence': None,
-                'reverse_number_of_mismatches': None,
-                'reverse_mismatches': None,
-                'reverse_sequence_status': None
-            })
+        for record in SeqIO.parse(reference_database, "fasta"):
+            sequence = str(record.seq)
+            if forward_primer:
+                forward_sequence = sequence[:forward_max]
+            else:
+                forward_sequence = None
+            if reverse_primer:
+                reverse_sequence = str(Seq(sequence[-reverse_max:]).reverse_complement())
+            else:
+                reverse_sequence = None
 
-        if forward_primer:
-            primer_alignment("forward", forward_primer, forward_sequence, record_result)
-        if reverse_primer:
-            primer_alignment("reverse", reverse_primer, reverse_sequence, record_result)
+            lineage = record.id.split("|")[2]
+            species_name = lineage.split(";")[-1]
+            accession_number = record.id.split("|")[1]
+            counter = record.id.split("|")[3]
 
-        primer_alignment_results.append(record_result)
+            record_result = {
+                'species_lineage': lineage,
+                'species_name': species_name,
+                'accession_number': accession_number,
+                'counter': counter
+            }
+            if forward_primer:
+                record_result.update({
+                    'forward_sequence': None,
+                    'forward_number_of_mismatches': None,
+                    'forward_mismatches': None,
+                    'forward_sequence_status': None
+                })
+            if reverse_primer:
+                record_result.update({
+                    'reverse_sequence': None,
+                    'reverse_number_of_mismatches': None,
+                    'reverse_mismatches': None,
+                    'reverse_sequence_status': None
+                })
+            if forward_primer:
+                primer_alignment("forward", forward_primer, forward_sequence, record_result)
+            if reverse_primer:
+                primer_alignment("reverse", reverse_primer, reverse_sequence, record_result)
 
-    df = pd.DataFrame(primer_alignment_results)
-    df.to_csv(f"{database_name}_primer_result_all_entries_info.csv", sep=";", index=False)
+            primer_alignment_results.append(record_result)
 
-    # Define mismatch sets for the different rules (based on Stadhouders el al., 2010).
-    purine_purine_mismatches = {('A', 'T'), ('A', 'G'), ('G', 'A'), ('G', 'C'), ('C', 'G')}
-    pyrimidine_pyrmidine_mismatches = {('T', 'A'), ('T', 'C'), ('C', 'T')}
-    purine_pyrimidine_mismatches = {('C', 'A'), ('A', 'C'), ('G', 'T'), ('T', 'G')}
+        # Define mismatch sets for the different rules (based on Stadhouders el al., 2010).
+        purine_purine_mismatches = {('A', 'T'), ('A', 'G'), ('G', 'A'), ('G', 'C'), ('C', 'G')}
+        pyrimidine_pyrmidine_mismatches = {('T', 'A'), ('T', 'C'), ('C', 'T')}
+        purine_pyrimidine_mismatches = {('C', 'A'), ('A', 'C'), ('G', 'T'), ('T', 'G')}
 
-    filtered_records_perfect = []
-    filtered_records_ok = []
-    filtered_records_bad = []
-    filtered_records_no_data = []
+        filtered_records_perfect = []
+        filtered_records_ok = []
+        filtered_records_bad = []
+        filtered_records_no_data = []
+        filtered_records_all_data = []
 
-    for record in primer_alignment_results:
-        avoid_forward = False
-        dodge_forward = False
-        avoid_reverse = False
-        dodge_reverse = False
-        if forward_primer:
-            forward_mismatch = record['forward_mismatches']
-            forward_mismatches = record['forward_number_of_mismatches'] # The number of mismatches.
-            forward_sequence = record['forward_sequence']
-            avoid_forward = has_gap(forward_mismatch) # Check for gaps.
-        if reverse_primer:
-            reverse_mismatch = record['reverse_mismatches']
-            reverse_mismatches = record['reverse_number_of_mismatches'] # The number of mismatches.
-            reverse_sequence = record['reverse_sequence']
-            avoid_reverse = has_gap(reverse_mismatch) # Check for gaps.
+        for record in primer_alignment_results:
+            avoid_forward = False
+            dodge_forward = False
+            avoid_reverse = False
+            dodge_reverse = False
 
-        all_bad_pos = range(1, 6)
-        # First rule set - Standard real-time PCR (Taq DNA polymerase-based)
-        if forward_primer:
-            if check_mismatches(forward_mismatch, {1}, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches)):
-                avoid_forward = True
-            elif check_mismatches(forward_mismatch, {2}, purine_purine_mismatches):
-                avoid_forward = True
-        if reverse_primer:
-            if check_mismatches(reverse_mismatch, {1}, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches)):
-                avoid_reverse = True
-            elif check_mismatches(reverse_mismatch, {2}, purine_purine_mismatches):
-                avoid_reverse = True
-        
-        # Second rule set - Real-time RT-PCR using specific reverse primer (Taq DNA polymerase)
-        if forward_primer:
-            if check_mismatches(forward_mismatch, all_bad_pos, purine_purine_mismatches):
-                avoid_forward = True
-            elif check_mismatches(forward_mismatch, {1, 2}, pyrimidine_pyrmidine_mismatches):
-                avoid_forward = True
-            elif check_mismatches(forward_mismatch, {1}, purine_pyrimidine_mismatches):
-                avoid_forward = True
+            if forward_primer:
+                forward_mismatch = record['forward_mismatches']
+                forward_mismatches = record['forward_number_of_mismatches']
+                forward_sequence = record['forward_sequence']
+                avoid_forward = has_gap(forward_mismatch)
 
-        # Third rule set - rTth DNA polymerase-based real-time PCR using specific reverse primer
-        if reverse_primer:
-            if check_mismatches(reverse_mismatch, all_bad_pos, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches).union(purine_pyrimidine_mismatches)):
-                avoid_reverse = True
+            if reverse_primer:
+                reverse_mismatch = record['reverse_mismatches']
+                reverse_mismatches = record['reverse_number_of_mismatches']
+                reverse_sequence = record['reverse_sequence']
+                avoid_reverse = has_gap(reverse_mismatch)
 
-
-        # Check if the number of mismatches exceeds our threshold.
-        if forward_primer:
-            if type(forward_mismatches) == int:
-                if forward_mismatches > 2:
+            all_bad_pos = range(1, 6)
+            # First rule set - Standard real-time PCR (Taq DNA polymerase-based)
+            if forward_primer:
+                if check_mismatches(forward_mismatch, {1}, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches)):
                     avoid_forward = True
-                elif 1 <= forward_mismatches <= 2:
-                    dodge_forward = True
-        if reverse_primer:
-            if type(reverse_mismatches) == int:
-                if reverse_mismatches > 2:
+                elif check_mismatches(forward_mismatch, {2}, purine_purine_mismatches):
+                    avoid_forward = True
+
+            if reverse_primer:
+                if check_mismatches(reverse_mismatch, {1}, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches)):
                     avoid_reverse = True
-                elif 1 <= reverse_mismatches <= 2:
-                    dodge_reverse = True
+                elif check_mismatches(reverse_mismatch, {2}, purine_purine_mismatches):
+                    avoid_reverse = True
 
-        if forward_primer:
-            forward_sequence_status = (
-                "Bad" if avoid_forward else
-                "Ok" if dodge_forward else
-                "NA" if forward_sequence == "NA" else
-                "Perfect"
-            )
-            record['forward_sequence_status'] = forward_sequence_status
+            # Second rule set - Real-time RT-PCR using specific reverse primer (Taq DNA polymerase)
+            if forward_primer:
+                if check_mismatches(forward_mismatch, all_bad_pos, purine_purine_mismatches):
+                    avoid_forward = True
+                elif check_mismatches(forward_mismatch, {1, 2}, pyrimidine_pyrmidine_mismatches):
+                    avoid_forward = True
+                elif check_mismatches(forward_mismatch, {1}, purine_pyrimidine_mismatches):
+                    avoid_forward = True
 
-        if reverse_primer:
-            reverse_sequence_status = (
-                "Bad" if avoid_reverse else
-                "Ok" if dodge_reverse else
-                "NA" if reverse_sequence == "NA" else
-                "Perfect"
-            )
-            record['reverse_sequence_status'] = reverse_sequence_status
-            
-        if forward_primer and reverse_primer: # This is triggered when both primers have been used as inputs.
-            if avoid_forward or avoid_reverse:
-                filtered_records_bad.append(record)
-            elif dodge_forward or dodge_reverse:
-                filtered_records_ok.append(record)
-            elif forward_sequence == "NA" and reverse_sequence == "NA":
-                filtered_records_no_data.append(record)
-            else:
-                filtered_records_perfect.append(record)
-        elif forward_primer or reverse_primer: # If only one primer is used, this happens instead. Ensures functionality in both scenarios.
-            if avoid_forward or avoid_reverse:
-                filtered_records_bad.append(record)
-            elif dodge_forward or dodge_reverse:
-                filtered_records_ok.append(record)
-            elif forward_sequence == "NA" or reverse_sequence == "NA":
-                filtered_records_no_data.append(record)
-            else:
-                filtered_records_perfect.append(record)
-            
+            # Third rule set - rTth DNA polymerase-based real-time PCR using specific reverse primer
+            if reverse_primer:
+                if check_mismatches(reverse_mismatch, all_bad_pos, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches).union(purine_pyrimidine_mismatches)):
+                    avoid_reverse = True
+
+            # Check if the number of mismatches exceeds our threshold.
+            if forward_primer:
+                if type(forward_mismatches) == int:
+                    if forward_mismatches > 2:
+                        avoid_forward = True
+                    elif 1 <= forward_mismatches <= 2:
+                        dodge_forward = True
+            if reverse_primer:
+                if type(reverse_mismatches) == int:
+                    if reverse_mismatches > 2:
+                        avoid_reverse = True
+                    elif 1 <= reverse_mismatches <= 2:
+                        dodge_reverse = True
+
+            if forward_primer:
+                if avoid_forward:
+                    forward_sequence_status = "Bad"
+                elif dodge_forward:
+                    forward_sequence_status = "Ok"
+                elif forward_sequence == "NA":
+                    forward_sequence_status = "NA"
+                else:
+                    forward_sequence_status = "Perfect"
+
+                record['forward_sequence_status'] = forward_sequence_status
 
 
-    df_perfect = pd.DataFrame(filtered_records_perfect)
-    df_perfect.to_csv(f"{database_name}_primer_result_perfect_entries.csv", sep=";", index=False)
-    df_ok = pd.DataFrame(filtered_records_ok)
-    df_ok.to_csv(f"{database_name}_primer_result_ok_entries.csv", sep=";", index=False)
-    df_bad = pd.DataFrame(filtered_records_bad)
-    df_bad.to_csv(f"{database_name}_primer_result_bad_entries.csv", sep=";", index=False)
-    df_no_data = pd.DataFrame(filtered_records_no_data)
-    df_no_data.to_csv(f"{database_name}_primer_result_no_data_entries.csv", sep=";", index=False)
+            if reverse_primer:
+                if avoid_reverse:
+                    reverse_sequence_status = "Bad"
+                elif dodge_reverse:
+                    reverse_sequence_status = "Ok"
+                elif reverse_sequence == "NA":
+                    reverse_sequence_status = "NA"
+                else:
+                    reverse_sequence_status = "Perfect"
 
-if forward_primer:
-    omega_function(df, "forward_sequence", forward_primer)
-if reverse_primer:
-    omega_function(df, "reverse_sequence", reverse_primer)
+                record['reverse_sequence_status'] = reverse_sequence_status
+            if forward_primer and reverse_primer: # This is triggered when both primers have been used as inputs.
+                if forward_sequence_status == "Perfect" and reverse_sequence_status == "Perfect":
+                    filtered_records_perfect.append(record)
+                elif avoid_forward or avoid_reverse:
+                    filtered_records_bad.append(record)
+                elif dodge_forward or dodge_reverse:
+                    filtered_records_ok.append(record)
+                elif forward_sequence == "NA" and reverse_sequence == "NA":
+                    filtered_records_no_data.append(record)
 
-###
-###
-###
+            elif forward_primer or reverse_primer: # If only one primer is used, this happens instead. Ensures functionality in both scenarios.
+                if forward_sequence_status == "Perfect" and reverse_sequence_status == "Perfect":
+                        filtered_records_perfect.append(record)
+                elif avoid_forward or avoid_reverse:
+                    filtered_records_bad.append(record)
+                elif dodge_forward or dodge_reverse:
+                    filtered_records_ok.append(record)
+                elif forward_sequence == "NA" and reverse_sequence == "NA":
+                    filtered_records_no_data.append(record)
+                
+        df_perfect = pd.DataFrame(filtered_records_perfect)
+        df_ok = pd.DataFrame(filtered_records_ok)
+        df_bad = pd.DataFrame(filtered_records_bad)
+        df_no_data = pd.DataFrame(filtered_records_no_data)
+        df_combined = pd.concat([df_perfect, df_ok, df_bad, df_no_data], ignore_index=True)
+        
+        df_perfect.to_csv(f"{database_name}_primer_result_perfect_entries.csv", sep=";", index=False)
+        df_ok.to_csv(f"{database_name}_primer_result_ok_entries.csv", sep=";", index=False)
+        df_bad.to_csv(f"{database_name}_primer_result_bad_entries.csv", sep=";", index=False)
+        df_no_data.to_csv(f"{database_name}_primer_result_no_data_entries.csv", sep=";", index=False)
+        df_combined.to_csv(f"{database_name}_primer_result_all_entries_info.csv", sep=";", index=False)
 
-os.chdir("../..")
-print(f"\nDataframes have been created.\nThe dataframes are found in {os.path.abspath(evaluation_directory)}")
-if forward_primer or reverse_primer:
-    print("Primer compatibility check has been performed. Please review the relevant files.")
+
+    if forward_primer:
+        omega_function(df_combined, "forward_sequence", forward_primer)
+    if reverse_primer:
+        omega_function(df_combined, "reverse_sequence", reverse_primer)
+
+    ###
+    ###
+    ###
+
+    os.chdir("../..")
+
+    current_working_directory = os.getcwd()
+
+    relative_path_database = os.path.relpath(evaluation_directory, current_working_directory)
+
+    end_timestamp = datetime.today().strftime("%H:%M:%S") # Creates a variable called end_timestamp with the format HH:MM:SS.
+    program_duration = round(time.time() - program_timer, 2)
+
+    append_and_print_message(log_file,
+        f"\nIt took {program_duration} seconds from start to finish.\n"
+        f"The program finished at {end_timestamp}.\n\n"
+        f"Thanks for using EchoPipe.\n\n"
+        f"##############################################################################\n\n")
+    print(f"The reference database has successfully been evaluated!\n")
+
+    print(f"\nDataframes have been created.\nThe dataframes are found in {relative_path_database}")
+    if forward_primer or reverse_primer:
+        print("Primer compatibility check has been performed. Please review the relevant files.")
+
+if __name__ == "__main__":
+    main()
