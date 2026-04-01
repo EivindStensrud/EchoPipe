@@ -286,19 +286,27 @@ def process_species_taxonomy(species, filtered_species_collection, taxonomic_ran
                     taxa_rank_list = [] # Creates a list for taxonomic ranks to be added onto for each species. Used in a FASTA header downstreams.
 
                     for taxonomic_rank in taxonomic_ranks:
-                        taxonomic_rank_exist = False # Set to default. Used to see if a particular taxonomic rank we are interested is exists/is assigned to the species.
+                        taxonomic_rank_exist = False 
 
-                        for item in LineageEx: # Loops through all the items in LineageEx, wherein "Rank" corresponds to the taxonomic ranks we are looking at. "ScientificName" represents the name of such ranks. E.g., for humans: genus = Homo.
-                            if item["Rank"] == taxonomic_rank: # if item["Rank"] is the same as taxonomic_rank...
-                                taxonomic_rank_exist = True # ... then it is a match; it exists...
-                                #cleaned_name = re.sub(r'\s*\(.*?\)', '', item["ScientificName"]).strip()
+                        for item in LineageEx: 
+                            # --- FIX START ---
+                            # Use .get("Rank") to safely check if the key exists.
+                            # If "Rank" is missing, it returns None, and the check simply fails (safe).
+                            if item.get("Rank") == taxonomic_rank: 
+                            # --- FIX END ---
+                                taxonomic_rank_exist = True 
                                 tax_name = (item["ScientificName"])
                                 cleaned_taxa_name = re.match(r'([^:;(\s]+)', tax_name)
-                                cleaned_taxa_name = cleaned_taxa_name.group(0).strip()
-                                taxa_rank_list.append(cleaned_taxa_name) # ... and item["ScientificName"] (e.g. genus = Homo) is added to taxa_rank_list.
+                                # Add safety check for regex match too, just in case
+                                if cleaned_taxa_name:
+                                    cleaned_taxa_name = cleaned_taxa_name.group(0).strip()
+                                else:
+                                    cleaned_taxa_name = tax_name # Fallback if regex fails
+                                    
+                                taxa_rank_list.append(cleaned_taxa_name) 
 
-                        if not taxonomic_rank_exist: # If the taxonomic rank we are looking at exists/is assigned to the species...
-                            taxa_rank_list.append("NA") # ... then the phrase NA is appended to the position that such a rank normally would occupy in the header.
+                        if not taxonomic_rank_exist: 
+                            taxa_rank_list.append("NA")
 
                     taxa_rank_list.append(scientific_name.replace(' ', '_')) # Removes space between Genus species to get Genus_species to be used in the header.
                     taxa_to_fasta = ";".join(taxa_rank_list)  # Joins each entry inside of taxa_rank_list together by ;. Example: Eukaryota;Chordata;Amphibia;Caudata;Salamandridae;Triturus;Triturus_cristatus
@@ -497,10 +505,9 @@ def perform_blast_operations(
         analysed_accession_numbers = f"{species_directory}/{specie}_{analysed}.txt"
 
         # In order to check if the new_seqs file is empty. If it is empty, the file is removed and the current species' loop is stopped with "return".
-        if not reuse_sequences and os.path.isfile(file_to_blast) and os.path.getsize(file_to_blast) == 0: # Proceeds with BLAST if a file based on the current run_name exists.
+        if not reuse_sequences and os.path.isfile(file_to_blast) and os.path.getsize(file_to_blast) == 0:
             analysis_completed(finished_accession_numbers, analysed_accession_numbers, reuse_sequences)
             os.remove(file_to_blast)
-            new_accession_species.remove(specie)
             return
 
         # Proceed if the file exists
@@ -672,11 +679,18 @@ def main():
 
     program_timer = time.time()
 
-    taxid_collection = "taxid_collection.txt" # Species' unique taxids are stored here and used for retrieving data.
-    taxid_log_file = f"{logs_dir}{run_name}_{taxid_collection}" # A copy of the taxid_collection.txt file that is either re-used or created. This file, however, is placed in Log_files/.
-    error_collection = f"{logs_dir}{run_name}_species_not_found.txt" # If a species is not found from input_species, it will be listed here.
-    duplicate_collection = f"{logs_dir}{run_name}_duplicate_species_entries.txt" # If there are duplicate entries of the same species in input_species, it will be listed here (this is based on taxid, so species with more than one name may be detected).
-    species_found = f"{logs_dir}{run_name}_species_found.txt" # If the species was found.
+    base_dir = os.path.abspath(os.getcwd())
+
+    taxid_collection = os.path.join(base_dir, "taxid_collection.txt") # Species' unique taxids are stored here and used for retrieving data.
+    
+    # Ensure logs_dir is also an absolute path
+    logs_dir_abs = os.path.join(base_dir, logs_dir)
+    
+    taxid_log_file = os.path.join(logs_dir_abs, f"{run_name}_taxid_collection.txt")  # A copy of the taxid_collection.txt file that is either re-used or created. This file, however, is placed in Log_files/.
+    error_collection = os.path.join(logs_dir_abs, f"{run_name}_species_not_found.txt") # If a species is not found from input_species, it will be listed here.
+    duplicate_collection = os.path.join(logs_dir_abs, f"{run_name}_duplicate_species_entries.txt") # If there are duplicate entries of the same species in input_species, it will be listed here (this is based on taxid, so species with more than one name may be detected).
+    species_found = os.path.join(logs_dir_abs, f"{run_name}_species_found.txt") # If the species was found.
+
 
     # The taxonomic rank used by the script, may be altered.
     taxonomic_ranks = ['domain', 'phylum', 'class', 'order', 'family', 'genus'] # Could be modified by the user. Used to make a FASTA header downstreams. Note: species are included downstreams.
@@ -905,16 +919,23 @@ def main():
             f"{len(new_accession_species)} out of {len(species_list)} species have new accession numbers.\n\n"
             "--------------------------------------------------------------------------\n\n\n")
 
-    else: # This is triggered if the user runs the program with the flag -R, --repeat. This code checks that there has been previous runs performed for the species.
+    else: # This is triggered if the user runs the program with the flag -R, --repeat.
         for species in species_list:
             accession_numbers_file = f"Species/{species}/{species}_{analysed}.txt"
             previous_accession_numbers_path = f"Species/{species}"
-            check_if_analysed_exist = os.path.isfile(accession_numbers_file) # If the defined path does not exist, then check_if_analysed_exist = False.
-            previous_accession_numbers_exist = any("new_accession_numbers" in file for file in os.listdir(previous_accession_numbers_path))
-            if not check_if_analysed_exist and not previous_accession_numbers_exist: # This parts checks if the current species has 1) previously analysed accession numbers 2) at least a file with accession numbers to be re-analysed.
-                continue # If both of the above are false, then the loop for the current species stops and moves on to the next.
+            
+            check_if_analysed_exist = os.path.isfile(accession_numbers_file)
+            
+            # --- FIX: Check if directory exists before using os.listdir ---
+            if os.path.exists(previous_accession_numbers_path):
+                previous_accession_numbers_exist = any("new_accession_numbers" in file for file in os.listdir(previous_accession_numbers_path))
             else:
-                new_accession_species.append(species) # Adds the species to the new list that will be iterated through downstream.
+                previous_accession_numbers_exist = False
+                
+            if not check_if_analysed_exist and not previous_accession_numbers_exist:
+                continue 
+            else:
+                new_accession_species.append(species)
 
 
     ###
@@ -936,7 +957,7 @@ def main():
         
         with ThreadPoolExecutor(max_workers=thread_number) as executor:
             futures = [executor.submit(download_fasta_sequences, specie, run_name, taxid_collection, sequence_batch_size, max_retries, log_file, consecutive_fail_counter, failed_information_downloads, type_of_download)
-                for specie in species_list]
+                for specie in new_accession_species]
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading fasta sequences"):
                 result = future.result()  # Ensure results are appropriately captured and handled
@@ -973,7 +994,7 @@ def main():
     with ThreadPoolExecutor(max_workers=thread_number) as executor:
         futures = [executor.submit(perform_blast_operations, new_accession_species, run_name, database_path, analysed, min_length,
         outfmt_string, evalue, reuse_sequences, log_file, specie)
-            for specie in species_list]
+            for specie in new_accession_species]
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Conducting BLAST"):
             result = future.result()  # Ensure results are appropriately captured and handled
@@ -996,31 +1017,30 @@ def main():
     all_species_new_results = [] # Creates an empty list to be filled with new sequences from run_name (if there are any).
 
     for species in new_accession_species: # Loops through the species that has been BLASTed.
-        new_results_check = f"Species/{species}/{species}_{run_name}_fasta_blast_results_check.fasta" # Creates a variable based on a file name we wish to know the existance of.
+        new_results_check = f"Species/{species}/{species}_{run_name}_fasta_blast_results_check.fasta" 
         
-        if os.path.exists(new_results_check): # Checks if the file exists. If yes, then the subsequent code is executed.
-            with open(new_results_check, "r") as file: # The file is read...
-                new_blast_results = file.readlines() # ... and its content is stored in new_blast_results.
-                all_species_new_results.extend(new_blast_results) # Extends the list called all_species_new_results with the content from the read file.
+        if os.path.exists(new_results_check): 
+            with open(new_results_check, "r") as file: 
+                new_blast_results = file.readlines() 
+                all_species_new_results.extend(new_blast_results) 
         else:
-            print(f"Nothing new from {run_name} for {species}.") # Prints a message if there is nothing new from run_name. Optional print statement.
+            print(f"Nothing new from {run_name} for {species}.") 
 
-    if all_species_new_results: # This 'if' statement makes the subsequent code to not be executed if the list is empty.
+    if all_species_new_results: 
         result_file = f"BLAST_results/{run_name}_to_curate.fasta"
-        with open(result_file, "w") as file: # Creates and writes content into a file with all the new sequences retrieved from run_name.
+        with open(result_file, "w") as file: 
             for line in all_species_new_results:
                 file.write(line)
         append_and_print_message(log_file,
             f"\n\nNew sequence(s) found! {result_file} is ready to be curated.\n")
 
-
-        species_in_final_file = set()  # Using a set to ensure uniqueness.
+        species_in_final_file = set()  
 
         with open(result_file, "r") as file:
             final_file_content = file.readlines()
 
             for line in final_file_content:
-                if line.startswith('>'):  # Check if it's a header line.
+                if line.startswith('>'):  
                     header = line.strip()
                     species_name = header.split('|')[2].split(';')[-1].replace('_', ' ')
 

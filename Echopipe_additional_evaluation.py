@@ -121,7 +121,17 @@ def positions_to_check(mode, positions, aligned_primer, aligned_sequence, record
 def primer_alignment(mode, primer_sequence, sequence_to_align, record_result):
     aligner = PairwiseAligner()
     aligner.match = 1
-    aligner.mismatch = -1
+    
+    # Check if the primer contains degenerate bases (anything other than A, C, G, or T)
+    standard_bases = set("ACGT")
+    is_degenerate = any(base not in standard_bases for base in primer_sequence.upper())
+    
+    # Apply mismatch penalty dynamically
+    if is_degenerate:
+        aligner.mismatch = 0   # Forgiving mode for degenerate primers (W, R, I, Y, etc.)
+    else:
+        aligner.mismatch = -1  # Strict mode for standard primers
+        
     aligner.open_gap_score = -2
     aligner.extend_gap_score = -1
     aligner.end_gap_score = 0
@@ -135,8 +145,8 @@ def primer_alignment(mode, primer_sequence, sequence_to_align, record_result):
     primer_length = len(primer_sequence)
 
     max_score = aligner.match * primer_length
-    score_cutoff = max_score * 0.2
-    length_cutoff = primer_length * 1.2
+    score_cutoff = max_score * 0.5
+    length_cutoff = primer_length * 1.3
 
     sequence_key = f"{mode}_sequence"
     
@@ -268,6 +278,7 @@ def multiple_sequence_alignment(df, mode): # mode is either forward_sequence or 
     mafft_cline = MafftCommandline(
         input=temp_input_path,
         auto=True
+
     )
     
     # Run MAFFT alignment
@@ -285,7 +296,6 @@ def omega_function(df, mode, primer): # Name it something appropriately.
     multiple_sequence_alignment(df, mode) # Creates the sequence alignments.
     df = df[mode]
     sequences = [sequence for sequence in df if sequence != "NA"]
-    print(sequences)
     max_len = max(len(seq) for seq in sequences) # Gives us the longest sequence from the df. Include ones with gaps introduced.
     padded_sequences = [seq.ljust(max_len, '-') for seq in sequences] # Add gaps at the end of sequences that are shorter than max_len to ensure functionality downstreams.
     adjusted_primer = primer.ljust(max_len, '-')
@@ -633,9 +643,9 @@ def main():
         append_and_print_message(log_file, "Primer compatibility check has been performed. Please review the relevant files.\n")
 
         if forward_primer:
-            forward_max = int(len(forward_primer) * 1.2) # add 20% buffer
+            forward_max = int(len(forward_primer) * 1.2)
         if reverse_primer:
-            reverse_max = int(len(reverse_primer) * 1.2) # add 20% buffer
+            reverse_max = int(len(reverse_primer) * 1.2)
 
         primer_alignment_results = []
 
@@ -675,6 +685,7 @@ def main():
                     'reverse_mismatches': None,
                     'reverse_sequence_status': None
                 })
+
             if forward_primer:
                 primer_alignment("forward", forward_primer, forward_sequence, record_result)
             if reverse_primer:
@@ -712,6 +723,7 @@ def main():
                 avoid_reverse = has_gap(reverse_mismatch)
 
             all_bad_pos = range(1, 6)
+
             # First rule set - Standard real-time PCR (Taq DNA polymerase-based)
             if forward_primer:
                 if check_mismatches(forward_mismatch, {1}, purine_purine_mismatches.union(pyrimidine_pyrmidine_mismatches)):
@@ -777,6 +789,7 @@ def main():
                     reverse_sequence_status = "Perfect"
 
                 record['reverse_sequence_status'] = reverse_sequence_status
+                
             if forward_primer and reverse_primer: # This is triggered when both primers have been used as inputs.
                 if forward_sequence_status == "Perfect" and reverse_sequence_status == "Perfect":
                     filtered_records_perfect.append(record)

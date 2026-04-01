@@ -576,7 +576,7 @@ def main():
     end_timestamp = datetime.today().strftime("%H:%M:%S") # Creates a variable called end_timestamp with the format HH:MM:SS.
     program_duration = round(time.time() - program_timer, 2)
     append_and_print_message(log_file,
-        f"\nEchopipe_database_creation.py\n"
+        f"\nEchopipe_database_curation.py\n"
         f"It took {program_duration} seconds from start to finish.\n"
         f"The program finished at {end_timestamp}.\n"
         "##############################################################################\n\n")
@@ -585,7 +585,7 @@ def main():
     print("Conduct a manual curation step, see the tutorial and manual for more thorough recommendations and instructions:\n")
     print("https://github.com/EivindStensrud/EchoPipe/blob/main/Tutorial.md\n")
     print("To finalize the reference database, choose a database name, we recommend to include organisms group and date:\n")
-    print(f"Code line: \033[32mpython Echopipe_database_completion.py -b BLAST_results/{run_name}_to_curate.fasta -c Database_curation/{run_name}/{run_name}_aligned.fasta -u Database_name_{run_name}.fasta\033[0m\n")
+    print(f"Code line: \n\033[32mpython Echopipe_database_completion.py -b BLAST_results/{run_name}_to_curate.fasta -c Database_curation/{run_name}/{run_name}_aligned.fasta -u Database_name_{run_name}.fasta\033[0m\n")
 
 
     os.chdir("../..")

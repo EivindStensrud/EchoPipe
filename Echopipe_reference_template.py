@@ -14,7 +14,7 @@
 #
 # The user may either choose to download sequences based on a species list of their own, or they may provide a fasta file with sequences.
 # ---------------------------------------------------------------------------
-#works great!
+
 
 import warnings
 from Bio import BiopythonDeprecationWarning
@@ -36,6 +36,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import sys
 import glob
+import random
 
 ###
 ### Functions
@@ -91,6 +92,48 @@ def number_threads():
     thread_number = executor._max_workers
     thread_number = min((thread_number / 2 ), 7) # max seven, as API allows for up to 8 searches per second.
     return thread_number
+
+def fetch_taxid(species, email, api_key):
+    """Fetches the unique NCBI TaxID for a given species name with retries."""
+    Entrez.email = email
+    Entrez.api_key = api_key
+    
+    max_retries = 3
+    retry_delay = 10  # Start with 10 seconds, doubling on each failure
+    
+    for attempt in range(max_retries):
+        try:
+            # Perform the search
+            handle = Entrez.esearch(db="Taxonomy", term=species.strip())
+            record = Entrez.read(handle)
+            handle.close()
+            
+            if record["IdList"]:
+                return record["IdList"][0]
+            else:
+                return None  # No TaxID found (not an error, just no result)
+                
+        except HTTPError as e:
+            # Retry on rate limits (429) or server errors (5xx)
+            if e.code == 429 or 500 <= e.code < 600:
+                if attempt < max_retries - 1:
+                    print(f"\033[33mHTTP Error {e.code} for '{species}'. Retrying in {retry_delay}s...\033[0m")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+            # Do not retry on 404 (Not Found) or 400 (Bad Request)
+            return None
+            
+        except Exception as e:
+            # Catch other connection/parsing errors
+            if attempt < max_retries - 1:
+                print(f"\033[33mError fetching '{species}': {e}. Retrying in {retry_delay}s...\033[0m")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            return None
+
+    return None
 
 def fetch_species_data(species, email, api_key, length_threshold, max_length, retmax, custom_query, retry_delay=10, max_retries=4):
     attempt = 0
@@ -154,7 +197,7 @@ def download_species_data(species_list, email, api_key, length_threshold, max_le
         #progress bar
         with tqdm(total=len(species_list), desc="Downloading species data") as pbar:
             for species in species_list:
-                time.sleep(0.3) #add a sleep stage to avoid too many requests to NCBI.
+                time.sleep(random.uniform(0.1, 0.4)) 
                 
                 future = executor.submit(
                     fetch_species_data, species, email, api_key, length_threshold,
@@ -204,7 +247,7 @@ def run_mafft_parallel(files_to_align, length_threshold, longest_amplicon_size, 
     num_workers = thread_number
 
 
-    print("Running MAFFT alignment")
+    print("Running MAFFT alignment.")
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # Map the process_file function to the list of files
         results = executor.map(process_file, files_to_align, [length_threshold]*len(files_to_align), [longest_amplicon_size]*len(files_to_align))
@@ -293,6 +336,8 @@ def main():
         help="Completes the reference template database.")
     group_2.add_argument('input_file_species', type=str, nargs='?',
         help="Txt or CSV file species names or a fasta file that is to be converted into the reference template database (-p is then required).")
+    parser.add_argument("-n", "--random_subset", type=int, help="Number of random species to use for template creation (e.g., 50).")
+    parser.add_argument("-sf", "--subset_file", type=str, help="Path to a file containing a specific subset of species to use.")
 
     args = parser.parse_args()
 
@@ -307,6 +352,8 @@ def main():
     else:
         print("Error: Both ", input_file, " and ", input_file_species," are missing. Please provide at least.")
         sys.exit(1)
+    if args.subset_file:
+        args.subset_file = os.path.abspath(args.subset_file)
 
     working_directory = "Reference_template_creation/"
     to_be_curated = "aligned_sequences_to_curate.fasta"
@@ -345,7 +392,9 @@ def main():
                 i = 1
                 run_name = f"{DATE}_{i}"
                 log_file = f"{logs}{run_name}_log.txt"
-                append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n\n")
+                append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n")
+                print(f"##############################################################################\n")
+
 
                 with open(log_file, "w") as file:
                     file.write(
@@ -369,25 +418,114 @@ def main():
                             f"Custom query: {args.query}\n"
                             f'Search term: [Organism] AND ("{length_threshold}"[SLEN] : "{max_length}"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" {args.query}')
                 
-                unique_names = set()
+                # Existing unique name handling
+                raw_names = set()
                 with open(input_file, "r") as file:
                     for line in file:
-                        unique_names.add(line.strip())
-                with open(input_file, "w") as file:
-                    for line in(unique_names):
-                        file.write(line + "\n")
+                        if line.strip():
+                            raw_names.add(line.strip())
+
+                # Define lists to track results
+                filtered_species_list = []
+                duplicates_found = []
+                seen_taxids = set()
+
+                with ThreadPoolExecutor(max_workers=thread_number) as executor:
+                    # Submit all tasks to the pool
+                    future_to_name = {
+                        executor.submit(fetch_taxid, name, args.email, args.api_key): name 
+                        for name in raw_names
+                    }
+                    
+                    time.sleep(random.uniform(0.1, 0.4)) 
+
+
+                    # Process results as they complete
+                    for future in tqdm(as_completed(future_to_name), total=len(raw_names), desc="Filtering TaxIDs"):
+                        name = future_to_name[future]
+                        try:
+                            taxid = future.result()
+                            
+                            if taxid:
+                                if taxid not in seen_taxids:
+                                    seen_taxids.add(taxid)
+                                    filtered_species_list.append(name)
+                                else:
+                                    msg = f"Skipping '{name}': Duplicate TaxID ({taxid}) already represented.\n"
+                                    append_and_print_message(log_file, msg)
+                                    duplicates_found.append(f"{name};{taxid}")
+                            else:
+                                msg = f"Warning: Could not resolve TaxID for '{name}'. Skipping.\n"
+                                append_and_print_message(log_file, msg)
+                                
+                        except Exception as exc:
+                            # Catch any unexpected errors from the thread itself
+                            msg = f"Generated an exception for '{name}': {exc}\n"
+                            append_and_print_message(log_file, msg)
+
+                # Save a dedicated file for duplicate records
+                if duplicates_found:
+                    dup_file_name = f"duplicate_taxid_entries.txt"
+                    dup_file_path =f"../{dup_file_name}"
+                    with open(dup_file_path, "w") as dup_file:
+                        dup_file.write("Species;TaxID\n")
+                        for entry in duplicates_found:
+                            dup_file.write(entry + "\n")
+                    print(f"Duplicate records saved to: {dup_file_name}")
+
+                base_name = os.path.basename(input_file)
+                clean_output_file = f"unique_{base_name}"
+                clean_output_file_path =f"../{clean_output_file}"
+                
+                with open(clean_output_file_path, "w") as file:
+                    for name in filtered_species_list:
+                        file.write(name + "\n")
+                        
+                print(f"\n\033[32mSuccess! Cleaned species list saved to: {clean_output_file}\033[0m")
+                print(f"Please use THIS file for the next step.\n")
+
+                species_for_template = filtered_species_list # Default = Use all
+
+                if args.subset_file:
+                    subset_names = set()
+                    if os.path.exists(args.subset_file):
+                        with open(args.subset_file, "r") as f:
+                            for line in f:
+                                if line.strip():
+                                    subset_names.add(line.strip())
+                        # Only use names that are in BOTH the subset file and our valid list
+                        species_for_template = [s for s in filtered_species_list if s in subset_names]
+                        print(f"\nSubset Mode: Using {len(species_for_template)} species from provided list for template.")
+                    else:
+                        print(f"\n\033[31mError: Subset file '{args.subset_file}' not found. Using full list.\033[0m")
+
+                elif args.random_subset is not None:
+                    # Check if requested number is valid
+                    if 0 < args.random_subset < len(filtered_species_list):
+                        species_for_template = random.sample(filtered_species_list, args.random_subset)
+                        print(f"\nSubset Mode: Randomly selected {len(species_for_template)} species for template creation.")
+                        
+                        # Save the random selection to a file
+                        base_name = os.path.basename(input_file).replace(".csv", "").replace(".txt", "")
+                        subset_filename = f"subset_{args.random_subset}_{base_name}.txt"
+                        subset_filename_path = f"../{subset_filename}"
+                        
+                        with open(subset_filename_path, "w") as f:
+                            for s in species_for_template:
+                                f.write(s + "\n")
+                        print(f"List of selected species saved to: {subset_filename}")
+                        
+                    else:
+                        print(f"\nSubset Mode: Requested number ({args.random_subset}) >= total species. Using full list.")
+
 
                 ncbi_output_file = "preformated_sequences.fasta"
 
-                # Download sequences with retries and delay
+                # Use the SUBSET list for downloading
                 if not skip_download:
-                    species_list = []
-                    with open(input_file, "r") as file:
-                        species_list = file.readlines()
-
-                    download_species_data(species_list, args.email, args.api_key, length_threshold, max_length, retmax, custom_query, thread_number)
-
-
+                    download_species_data(species_for_template, args.email, args.api_key, 
+                                          length_threshold, max_length, retmax, 
+                                          custom_query, thread_number)
                 mafft_input_file = input_file if skip_download else ncbi_output_file
                 min_batch_size = 45
                 max_batch_size = 55
@@ -459,7 +597,7 @@ def main():
                     print("MAFFT alignment completed.")
 
             
-                print("Running MAFFT on sequences within the marker region")
+                print("Running MAFFT on sequences within the marker region.")
                 with open(to_be_curated, "w") as file:
                     mafft_cline = MafftCommandline(
                         input="filtered_aligned_sequences.fasta",
@@ -485,7 +623,7 @@ def main():
                 append_and_print_message(log_file,
                 f"\nA draft of the reference template database has been created.\n"
                 f"Make sure to review {working_directory}{to_be_curated} before finalizing it to a reference template database with -C (--Complete).\n"
-                f"Finished at: {formatted_time_endtime}\n\n"
+                f"Finished at: {formatted_time_endtime}.\n\n"
                 f"It took {program_duration} seconds to run the program.\n\n"
                 "##############################################################################\n")
 
@@ -502,6 +640,7 @@ def main():
         log_file = f"{logs}{run_name}_log.txt"
 
         append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n")
+        print(f"##############################################################################\n")
 
         with open("reference_template_database.fasta", "w") as file:
             for record in SeqIO.parse(working_directory + to_be_curated, "fasta"):
@@ -524,12 +663,12 @@ def main():
         formatted_time_endtime = time.strftime("%Y-%m-%d %H:%M:%S", local_time_endtime)
 
         append_and_print_message(log_file,
-            f"\n\nReference_template_creation was completed by using the -C option:\n"
+            f"\nReference_template_creation was completed by using the -C option:\n"
             f"Initiated at: {formatted_time_startime}\n"
             f"Finished at: {formatted_time_endtime}\n\n"
             f"It took {program_duration} seconds to run the program.\n\n"
-            "##############################################################################")
-        print("reference_template_database.fasta has been created and is ready for use with Echopipe_database_creation.py\n\n")
+            "##############################################################################\n")
+        print("reference_template.fasta has been created and is ready for use with Echopipe_database_creation.py.\n")
 
     if vars(args).get("Complete"):
         print("Recommendation:\n")
@@ -538,7 +677,7 @@ def main():
     else:
         print("Recommendation:\n")
         print("First remove sequences arising from other gene regions; see tutorial for detailed explanation: https://github.com/EivindStensrud/EchoPipe/tree/main\n")
-        print(f"Next code line:\n\033[32mpython Echopipe_reference_template.py {args.input_file} -e {args.email} -a {args.api_key} -C \033[0m \n")
+        print(f"Next code line:\n\033[32mpython Echopipe_reference_template.py {clean_output_file} -e {args.email} -a {args.api_key} -C \033[0m \n")
 
 
 if __name__ == "__main__":

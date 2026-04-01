@@ -40,30 +40,80 @@ import sys
 ###
 ###
 
-# Adds existing sequences to a dictionary, appends new sequences and updates the counter for known sequences. Dictionary can be written to a file by calling the function write_output(output_path, species_data).
-def process_fasta_file(file_path, species_data):
+def process_fasta_file(file_path, species_data, accessions_to_keep=None, log_file=None):
     for record in SeqIO.parse(file_path, "fasta"):
+        
+        # --- FILTERING LOGIC ---
+        if '|' in record.id:
+            accession_number = record.id.split('|')[1]
+        elif '_' in record.id:
+            accession_number = record.id.split('_')[1] 
+        else:
+            accession_number = record.id 
+
+        if accessions_to_keep is not None and accession_number not in accessions_to_keep:
+            print(f"Skipping unapproved sequence: {accession_number}")
+            if log_file:
+                with open(log_file, "a") as f:
+                    f.write(f"{accession_number}\n") # Appends to _removed_accessions.txt
+            continue 
+        # -----------------------
+
         header = f">{record.id}"
         sequence = str(record.seq)
-        counter = int(header.split('|')[-1])
-        species_key = header.split('|')[2].split(';')[-1]
-        header_without_counter = header.rsplit('|', 1)[0]
+        
+        if not all(base in "ACGT" for base in sequence.upper()):
+            print(f"Skipping sequence with invalid bases (e.g., N): {accession_number}")
+            if log_file:
+                with open(log_file, "a") as f:
+                    f.write(f"{accession_number}\n") # Appends to _removed_accessions.txt
+            continue
 
-        # Check if the sequence is already seen for the species
-        if species_key in species_data:
-            if sequence in species_data[species_key]['sequences']:
-                # Update the counter for the specific sequence match
-                species_data[species_key]['sequences'][sequence]['counter'] += counter
-            else:
-                # Append the new sequence for the species
-                species_data[species_key]['sequences'][sequence] = {'counter': counter, 'header_without_counter': header_without_counter}
+        # --- NEW SAFE COUNTER & SPECIES EXTRACTION ---
+        # 1. Remove the asterisk if it's there
+        clean_header = header.rstrip('*')
+        
+        # 2. Extract the counter, species name, and base header based on the format
+        if '|' in clean_header:
+            counter_str = clean_header.split('|')[-1]
+            species_name = clean_header.split('|')[2].split(';')[-1]
+            header_without_counter = '|'.join(clean_header.split('|')[:-1])
         else:
-            species_data[species_key] = {'sequences': {sequence: {'counter': counter, 'header_without_counter': header_without_counter}}, 'sequence_set': {sequence}}
+            # If using the aligned file, everything is separated by underscores
+            parts = clean_header.split('_')
+            counter_str = parts[-1]
+            # Genus and species are the two words right before the counter
+            species_name = f"{parts[-3]}_{parts[-2]}"
+            header_without_counter = '_'.join(parts[:-1])
+            
+        try:
+            counter = int(counter_str)
+        except ValueError:
+            counter = 1 # Fallback just in case the format is totally unexpecte
+
+        # --- MERGING LOGIC -N--
+        if species_name in species_data:
+            if sequence in species_data[species_name]['sequences']:
+                species_data[species_name]['sequences'][sequence]['counter'] += counter
+            else:
+                species_data[species_name]['sequences'][sequence] = {
+                    'counter': counter, 
+                    'header_without_counter': header_without_counter
+                }
+        else:
+            species_data[species_name] = {
+                'sequences': {
+                    sequence: {
+                        'counter': counter, 
+                        'header_without_counter': header_without_counter
+                    }
+                }
+            }
 
 
-
-# Writes the content of the dictionary species_data to the defined output_path. Writes the content alphabetically based on species' names.
 def write_output(output_path, species_data):
+# Writes the content of the dictionary species_data to the defined output_path. Writes the content alphabetically based on species' names.
+
     with open(output_path, 'w') as output_file:
         # Sort species keys alphabetically
         sorted_species_keys = sorted(species_data.keys())
@@ -78,65 +128,16 @@ def write_output(output_path, species_data):
                 output_file.write(f"{header_without_counter}|{counter}\n{seq}\n")
 
 
+def read_sequences_to_remove(file_path):
 # Checks which accession numbers are to be removed based on the user's manual curation.
-def read_sequences_to_remove(sequences_to_remove):
-    with open(sequences_to_remove, "r") as file:
-        return {line.strip() for line in file}
-
-
-# This function removes the accession numbers and their corresponding sequences.
-def remove_sequences(input_fasta, accession_numbers, log_file=None, run_name=None):
-    temp_lines = []
-    removed_accessions = []  # Track removed accessions
-    skip = False
-
-    with open(input_fasta, "r") as infile:
-        for line in infile:
-            if line.startswith(">"):
-                accession_number = get_accession(line)
-                if accession_number in accession_numbers:
-                    removed_accessions.append(accession_number)
-                    print(f"Accession number: {accession_number} was removed.")
-                    skip = True
-                else:
-                    skip = False
-                    temp_lines.append(line)
-            elif not skip:
-                temp_lines.append(line)
-
-    with open(input_fasta, "w") as outfile:
-        outfile.writelines(temp_lines)
-
-    if removed_accessions and log_file:
-        log_removed_accessions(removed_accessions, log_file, run_name)
-
-
-# Filters away sequences that has other bases than ACGT (could, for example, be N).
-def filter_sequences_in_place(input_fasta, log_file, run_name):
-    records = list(SeqIO.parse(input_fasta, "fasta"))
-    filtered_records = []
-    removed_accessions = []  # List to track removed accessions
-
-    print(f"Total records in input FASTA: {len(records)}")  # Debug: Print total records
-
-    for record in records:
-        if all(base in "ACGT" for base in str(record.seq).upper()):
-            filtered_records.append(record)  # Keep only valid sequences
-        else:
-            # Extract the accession number from the header line
-            accession_number = record.id.split('|')[1]  # Adjust based on your header structure
-            removed_accessions.append(accession_number)  # Log the removed accession number
-
-    try:
-        with open(input_fasta, "w") as out_handle:
-            SeqIO.write(filtered_records, out_handle, "fasta")  # Write only valid records back to the file
-            print(f"Successfully wrote {len(filtered_records)} valid records to {input_fasta}.")  # Success message
-    except Exception as e:
-        print(f"Error writing to file {input_fasta}: {e}")
-
-    # Log removed accessions if any were removed
-    if removed_accessions:
-        log_removed_accessions(removed_accessions, log_file, run_name)  # Ensure this works correctly
+    to_remove = set()
+    if file_path and os.path.exists(file_path):
+        with open(file_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("Write down"): 
+                    to_remove.add(line)
+    return to_remove
 
 
 # Function to parse the fasta file and collect species counters using Biopython
@@ -153,8 +154,8 @@ def parse_fasta(file_path):
     return species_counters
 
 
-# Function to plot a histogram showing how many sequences there are per species.
 def plot_histogram_sequence_per_species(species_counters, run_name):
+# Function to plot a histogram showing how many sequences there are per species.
     values = sorted(species_counters.values(), reverse=True)
     
     # Calculate the mean and median.
@@ -190,8 +191,9 @@ def plot_histogram_sequence_per_species(species_counters, run_name):
     plt.savefig(f'{run_name}_histogram_sequences_per_species.png')
 
 
-# Function to plot a histogram showing the lengths of sequences and how many there are.
 def plot_histogram_sequence_lenghts(updated_database, run_name):
+# Function to plot a histogram showing the lengths of sequences and how many there are.
+
     sequence_lengths = [len(record.seq) for record in SeqIO.parse(updated_database, "fasta")]
 
     mean_length = np.mean(sequence_lengths)
@@ -219,8 +221,8 @@ def plot_histogram_sequence_lenghts(updated_database, run_name):
     plt.savefig(f'{run_name}_histogram_sequence_lengths.png')
 
 
-# Creates a dictionary with duplicate sequences and their headers.
 def find_duplicates(concatenated_fasta_file):
+# Creates a dictionary with duplicate sequences and their headers.
     sequence_dict = {}
     with open(concatenated_fasta_file, "r") as file:
         current_header = None
@@ -280,14 +282,15 @@ def is_monophyletic(tree, species_leaves):
     else:
         return False
 
-# A function that prints a message (msg) and appends it on to a file.
 def append_and_print_message(log_file, msg):
+# A function that prints a message (msg) and appends it on to a file.
+
     with open(log_file, "a") as file:
         file.write(msg)
     print(msg)
 
-#Read the counter value for the current date from the counter file.
 def read_counter(counter_file, date=None):
+#Read the counter value for the current date from the counter file.
     try:
         if os.path.exists(counter_file):
             with open(counter_file, "r") as f:
@@ -326,7 +329,7 @@ def get_accession(header_line):
 
 
 def get_log_file_name(logs_dir):
-    """Generate a unique log file name based on the latest date in the counter file and the counter."""
+#Generate a unique log file name based on the latest date in the counter file and the counter.
     # Ensure the logs directory exists
     os.makedirs(logs_dir, exist_ok=True)
 
@@ -366,38 +369,20 @@ def extract_accession_numbers_from_aligned_file(fasta_file):
     return accession_numbers
 
 
-def filter_fasta_file(input_fasta, valid_accessions, output_fasta, log_file=None, run_name=None):
-    with open(input_fasta, 'r') as f_in, open(output_fasta, 'w') as f_out:
-        sequence_buffer = ""
-        write_sequence = False
-        current_header = ""
-
-        for line in f_in:
-            if line.startswith(">"):
-                # Write previous sequence if it was valid
-                if write_sequence and sequence_buffer:
-                    f_out.write(sequence_buffer + "\n")
-                sequence_buffer = line  # start new buffer with header
-                current_header = line
-                accession_number = get_accession(line)
-                if accession_number in valid_accessions:
-                    write_sequence = True
-                else:
-                    print(f"Accession number: {accession_number} was removed")
-                    write_sequence = False
+def read_sequences_to_keep(file_path):
+    to_keep = set()
+    if file_path and os.path.exists(file_path):
+        # Parses the aligned FASTA and grabs the accession numbers
+        for record in SeqIO.parse(file_path, "fasta"):
+            if '|' in record.id:
+                accession = record.id.split('|')[1]
+            elif '_' in record.id:
+                accession = record.id.split('_')[1]
             else:
-                if write_sequence:
-                    sequence_buffer += line.strip()
+                accession = record.id
+            to_keep.add(accession)
+    return to_keep
 
-        # Write last sequence
-        if write_sequence and sequence_buffer:
-            f_out.write(sequence_buffer + "\n")
-
-    if log_file:
-        removed = [acc for acc in extract_accession_numbers_from_aligned_file(input_fasta)
-                   if acc not in valid_accessions]
-        if removed:
-            log_removed_accessions(removed, log_file, run_name)
 
 # Join all elements in sys.argv with a space separator
 def get_command_string():
@@ -409,9 +394,6 @@ def log_removed_accessions(accession_numbers, removed_accession_log, run_name):
         for accession in accession_numbers:
             file.write(f"{accession.strip()}\n")  # Use .strip() to avoid issues with newline characters
 
-def get_command_string():
-    command_string = ' '.join(sys.argv)
-    return command_string
 
 ###
 ###
@@ -457,52 +439,32 @@ def main():
     append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n\n")
 
 
-    species_data = {} # Creates an empty dictionary wherein sequences, their counters and accession numbers are kept track of.
+    species_data = defaultdict(lambda: {'sequences': {}}) # Creates an empty dictionary wherein sequences, their counters and accession numbers are kept track of.
 
-    # Fills up the dictionary species_data.
+    accessions_to_delete = read_sequences_to_remove(aligned_curated_file)
+
+    accessions_to_keep = read_sequences_to_keep(aligned_curated_file) if aligned_curated_file else None
+
+    # 2. Process old database (-o) normally (we don't filter the master database)
     if old_database:
+        print(f"Loading old database: {old_database}")
         process_fasta_file(old_database, species_data)
 
-    process_fasta_file(new_db_content, species_data)
+    # 3. Process the NEW sequences (-b) AND pass the 'keep' list to filter them
+    if new_db_content:
+        print(f"Loading and filtering new sequences: {new_db_content}")
+        process_fasta_file(new_db_content, species_data, accessions_to_keep, removed_accession_log)
+        
+    # 4. Save the merged result to the updated database (-u)
+    if updated_database:
+        print(f"Writing updated database to: {updated_database}")
+        write_output(updated_database, species_data)
 
-    # Removes sequences removed from aligned file.
-    valid_accessions = extract_accession_numbers_from_aligned_file(aligned_curated_file_format)
-
-    # Semi-curated file, filter by valid accessions
-    semi_curated_file = f"{curated_directory}/{run_name}_semi_curated_file.fasta"
-    semi_curated_file = os.path.abspath(semi_curated_file)
-    filter_fasta_file(new_db_content, valid_accessions, semi_curated_file, removed_accession_log, run_name)
-
-
-    # Removes unwanted sequences, if any, from the new database.
-    accession_numbers = read_sequences_to_remove(f"Database_curation/{run_name}/{run_name}_sequences_to_delete.txt")
-    accession_numbers_underscore = list([accession_number.replace(" ", "_") for accession_number in accession_numbers])
-    accession_numbers = list(accession_numbers) + accession_numbers_underscore
-    # Call the modified remove_sequences function
-    remove_sequences(semi_curated_file, accession_numbers, removed_accession_log, run_name)
-
-    # Removes sequences that has nucleotides other than ACGT in them, such as N.
-    filter_sequences_in_place(semi_curated_file, removed_accession_log, run_name)
-
-    curated_species_data = {}
-
-    # Creates the new database.
-    process_fasta_file(semi_curated_file, curated_species_data)
-
-    write_output(updated_database, curated_species_data)
-    print(f"Final curated database written to: {updated_database}")
-
-
-    ###
-    ###
-    ###
 
     os.chdir(curated_directory)
 
 
-
     print(f"Following informative files are found in the directory {curated_directory}\n")
-
 
     duplicate_sequences = find_duplicates(updated_database)
     if duplicate_sequences:
@@ -526,7 +488,7 @@ def main():
     tree_string = f"{run_name}_curated_tree_string.newick"
     tree_string = os.path.abspath(tree_string)
 
-    with open(semi_curated_file, "r") as outfile:
+    with open(updated_database, "r") as outfile:
         # Count the number of sequences
         n = sum(1 for line in outfile if line.startswith(">"))
         print(f"Number of sequences: {n}")  # Debug: Print the number of sequences
@@ -601,7 +563,7 @@ def main():
     sequences_per_file_fastree_normal = 10000
     if n >= sequences_per_file_fastree_normal:
         # Create the MAFFT commandline object with the "linsi" algorithm.
-        append_and_print_message(log_file,f"Running FastTree with fastest settings, input: {maffted_database} and output: {tree_string} with {n} sequences")
+        append_and_print_message(log_file,f"Running FastTree with fastest settings: \ninput: {maffted_database} \noutput: {tree_string} with {n} sequences")
         fasttree_cline = FastTreeCommandline(
         nt=True,
         fastest=True,
@@ -610,7 +572,7 @@ def main():
         out=tree_string)
 
     else:
-        append_and_print_message(log_file,f"Running FastTree with standard settings, input: {maffted_database} and output: {tree_string} with {n} sequences")
+        append_and_print_message(log_file,f"Running FastTree with standard settings: \ninput: {maffted_database} \noutput: {tree_string} with {n} sequences")
         fasttree_cline = FastTreeCommandline(
         nt=True,
         input=maffted_database,
