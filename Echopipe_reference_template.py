@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# This script is for generating a template reference database for the EchoPipe pipeline.
+# This script is for generating a reference template for the EchoPipe pipeline.
 # Read more on the GitHub repository: https://github.com/EivindStensrud/EchoPipe/tree/main
 #
 # The user may either choose to download sequences based on a species list of their own, or they may provide a fasta file with sequences.
