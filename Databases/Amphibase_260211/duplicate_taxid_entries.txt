@@ -1,3 +1,0 @@
-Species;TaxID
-Ranoidea caerulea;30344
-Pelophylax esculentus;45623
