@@ -7,9 +7,9 @@ For guidance of how to use the script, follow the Example, or read the manual.
 
 ## Flowchart of the workflow of EchoPipe:
 
-
-![Workflow_echopipe](https://github.com/EivindStensrud/EchoPipe/assets/83813403/e4a0ca27-31a7-48c9-95ab-b05cfbc6d086)
-
+<img width="982" height="1024" alt="Figure_1_workflow" src="https://github.com/user-attachments/assets/f944a13a-1524-4534-bfc7-1915753dec80" />  
+  
+Flowchart of the EchoPipe's workflow. Each color represents a module of the workflow and the corresponding script. Figure 1. EchoPipe modular workflow for iterative database creation and curation. The pipeline architecture is divided into four primary stages: Reference Template Generation (light yellow), Sequence Retrieval and Database Creation (light orange), Diagnostic Curation (orange), and Database Completion/Evaluation (red). The iterative feedback loop (bottom center) enables users to continuously update curated databases with novel accessions from public repositories without duplicating previous computational efforts.  
 
 
 
@@ -47,4 +47,5 @@ conda activate EchoPipe
 ```
 
 # Using EchoPipe
-Follow the tutorial where the Piredda primers and Micromonas species group was used.
+Follow the tutorial where the amphibian batra primers and Scandinavian amphibian species group was used.  
+https://github.com/EivindStensrud/EchoPipe/blob/main/Tutorial_amphibians.md  
