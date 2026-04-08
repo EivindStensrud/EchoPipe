@@ -22,7 +22,7 @@ Expected output: conda 24.5.0
 ``` 
 If the results is not conda 24.5.0, please update your conda version.
 
-[Figure_1_workflow.pdf](https://github.com/user-attachments/files/26561182/Figure_1_workflow.pdf)  
+<img width="982" height="1024" alt="Figure_1_workflow" src="https://github.com/user-attachments/assets/d2088ad1-da3c-4aa4-b14c-b1fa9c9e3785" />
   
 Flowchart of the EchoPipe's workflow. Each color represents a module of the workflow and the corresponding script. Figure 1. EchoPipe modular workflow for iterative database creation and curation. The pipeline architecture is divided into four primary stages: Reference Template Generation (light yellow), Sequence Retrieval and Database Creation (light orange), Diagnostic Curation (orange), and Database Completion/Evaluation (red). The iterative feedback loop (bottom center) enables users to continuously update curated databases with novel accessions from public repositories without duplicating previous computational efforts.
 
