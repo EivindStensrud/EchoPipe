@@ -4,7 +4,7 @@ EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluati
 
 This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-Status: Stable — command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
+Status: Stable - command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
 
 ## Quickstart (recommended minimal steps)
 
