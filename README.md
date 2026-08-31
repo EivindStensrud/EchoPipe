@@ -1,51 +1,72 @@
 # EchoPipe
-Tutorial on how to use the EchoPipe script.
-The scripts are command-line based, written in python and uses conda.
-Conda environment, and installations are found below.
 
-For guidance of how to use the script, follow the Example, or read the manual.
+EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluating and reformatting marker reference databases for environmental DNA (eDNA) metabarcoding.
 
-## Flowchart of the workflow of EchoPipe:
+This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-<img width="982" height="1024" alt="Figure_1_workflow" src="https://github.com/user-attachments/assets/f944a13a-1524-4534-bfc7-1915753dec80" />  
-  
-Flowchart of the EchoPipe's workflow. Each color represents a module of the workflow and the corresponding script. Figure 1. EchoPipe modular workflow for iterative database creation and curation. The pipeline architecture is divided into four primary stages: Reference Template Generation (light yellow), Sequence Retrieval and Database Creation (light orange), Diagnostic Curation (orange), and Database Completion/Evaluation (red). The iterative feedback loop (bottom center) enables users to continuously update curated databases with novel accessions from public repositories without duplicating previous computational efforts.  
+Status: Stable — command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
 
+## Quickstart (recommended minimal steps)
 
+Prerequisites
 
-# Dependencies and installation
-The script requires miniconda, and works on both Ubuntu (WSL) and OS.
+- Python 3.9+ (3.10 recommended)
+- Conda or a Python virtual environment
+- NCBI API key (recommended) and a contact email for Entrez
 
-Miniconda
-https://docs.anaconda.com/free/miniconda/index.html
+Install
 
-```
-conda install conda=24.5.0
-```
+```bash
+# create and activate a virtual environment (conda example)
+conda create -n echopipe python=3.10 -y
+conda activate echopipe
 
-## Ubuntu (WSL)
-Download the miniconda environment EchoPipe, environment_240930.yml, following instruction underneath.
+# install EchoPipe from GitHub
+pip install git+https://github.com/EivindStensrud/EchoPipe.git
 
-```
-wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/refs/heads/main/environment_240930.yml
-conda env create -f environment_240930.yml
-
-conda activate EchoPipe
-
+# check CLI
+echopipe --help
 ```
 
+Prepare inputs
 
-## OS and Windows
-Download the miniconda environment EchoPipe, environment_OS.yml, following instruction underneath for Ubuntu.
+- Provide a species list (CSV or TXT) with scientific names.
+- Provide primer sequences (forward and reverse, 5'→3').
 
+Quick workflow (replace placeholders with your files / values)
+
+```bash
+# 1) Build an initial template (primer sequences required)
+echopipe template species_list.csv \
+  -f FORWARD_PRIMER \
+  -r REVERSE_PRIMER \
+  -e your.email@example.com \
+  -a YOUR_NCBI_API_KEY
+
+# 2) Inspect and curate the alignment generated under Reference_template_creation/
+# (open aligned_sequences_to_curate.fasta in an MSA viewer, remove bad sequences)
+
+# 3) Finalize the template
+echopipe template species_list.csv -e your.email@example.com -a YOUR_NCBI_API_KEY -C
+
+# 4) Create the reference database (mines NCBI and extracts regions)
+echopipe create species_list.csv reference_template_database.fasta -e your.email@example.com -a YOUR_NCBI_API_KEY
+
+# 5) Curate extracted sequences
+echopipe curate BLAST_results/<date>_to_curate.fasta --min_length 200 --max_length 600 -N 0
+
+# 6) Complete and export the official database
+echopipe complete -b BLAST_results/<date>_to_curate.fasta -c Database_curation/<date>/<date>_aligned.fasta -u MyDatabase.fasta
+
+# 7) Reformat for downstream classifiers (example: QIIME)
+echopipe reformat MyDatabase.fasta qiime
 ```
-wget https://raw.githubusercontent.com/EivindStensrud/EchoPipe/refs/heads/main/environment_240930_OS.yml
-conda env create -f environment_240930_OS.yml
 
-conda activate EchoPipe
+Where to find more
 
-```
+- Full user guide and examples: docs/TUTORIAL.md
+- If you already have species and primer lists, substitute them into the quickstart commands above.
 
-# Using EchoPipe
-Follow the tutorial where the amphibian batra primers and Scandinavian amphibian species group was used.  
-https://github.com/EivindStensrud/EchoPipe/blob/main/Tutorial_amphibians.md  
+Contributing
+
+Contributions, bug reports and PRs are welcome. If you want me to add example species lists or helper scripts, tell me which format you prefer and I can add them.
