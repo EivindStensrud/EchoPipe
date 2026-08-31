@@ -4,7 +4,7 @@ EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluati
 
 This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-Status: Stable - command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
+Status: Stable — command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
 
 ## Quickstart (recommended minimal steps)
 
@@ -58,15 +58,77 @@ echopipe curate BLAST_results/<date>_to_curate.fasta --min_length 200 --max_leng
 # 6) Complete and export the official database
 echopipe complete -b BLAST_results/<date>_to_curate.fasta -c Database_curation/<date>/<date>_aligned.fasta -u MyDatabase.fasta
 
-# 7) Reformat for downstream classifiers (example: QIIME)
+# 7) Evaluate database quality and completeness
+echopipe evaluate MyDatabase.fasta \
+  Database_curation/<date>/Curated_content/<date>_post_curation_monophyletic_group.txt \
+  -f FORWARD_PRIMER \
+  -r REVERSE_PRIMER
+
+# 8) Reformat for downstream classifiers (optional)
 echopipe reformat MyDatabase.fasta qiime
 ```
 
-Where to find more
+---
 
-- Full user guide and examples: docs/TUTORIAL.md
+## Key workflow stages
+
+### Stage 6: Evaluate database (quality assurance)
+
+Before using your reference database, run the **evaluate** step to:
+
+- ✓ Test taxonomic **monophyly** (are species forming coherent monophyletic groups?)
+- ✓ Check **primer binding sites** (do all sequences align with your forward/reverse primers?)
+- ✓ Assess **GC content** distribution across the database
+- ✓ Detect **identical sequences** across species (potential misannotations)
+- ✓ Resolve **NCBI taxonomy IDs** and verify accession annotations
+- ✓ Generate **diagnostic plots** and summary statistics
+
+Example:
+
+```bash
+echopipe evaluate Amphibian_2026-03-17_1.fasta \
+  Database_curation/2026-03-17_1/Curated_content/2026-03-17_1_post_curation_monophyletic_group.txt \
+  -f ACACCGCCCGTCACCCT \
+  -r GTAYACTTACCATGTTACGACTT
+```
+
+**Output files** (stored under `Evaluation/<database_name>/`):
+- `{database}_GC_content_histogram.png` — GC-content distribution
+- `{database}_sequence_summary.csv` — Sequence statistics
+- `{database}_evaluation_species_summary.csv` — Species-level metrics
+- `{database}_evaluation_family_summary.csv` — Higher-order taxonomic metrics
+- Primer mismatch visualizations for forward and reverse primers
+
+This step is essential for **quality control and troubleshooting** before using your database downstream.
+
+---
+
+### Stage 7: Reformat for classifiers (optional)
+
+If you need to export your database for external taxonomic classifiers (QIIME 2, DADA2, SINTAX, RDP, etc.), use the **reformat** step:
+
+```bash
+echopipe reformat MyDatabase.fasta qiime    # QIIME 2
+echopipe reformat MyDatabase.fasta dadt     # DADA2 assignTaxonomy
+echopipe reformat MyDatabase.fasta sintax   # SINTAX
+echopipe reformat MyDatabase.fasta rdp      # RDP Classifier
+echopipe reformat MyDatabase.fasta dads     # DADA2 assignSpecies
+echopipe reformat MyDatabase.fasta idt      # IDTAXA
+```
+
+See `docs/TUTORIAL.md` for more details on supported formats.
+
+---
+
+## Where to find more
+
+- **Full user guide with examples**: docs/TUTORIAL.md
+- **Installation & requirements**: see Prerequisites above
+- **Troubleshooting & performance tips**: docs/TUTORIAL.md § Troubleshooting & performance tips
 - If you already have species and primer lists, substitute them into the quickstart commands above.
 
-Contributing
+---
+
+## Contributing
 
 Contributions, bug reports and PRs are welcome. If you want me to add example species lists or helper scripts, tell me which format you prefer and I can add them.
