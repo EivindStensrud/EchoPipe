@@ -127,8 +127,4 @@ See `docs/TUTORIAL.md` for more details on supported formats.
 - **Troubleshooting & performance tips**: docs/TUTORIAL.md § Troubleshooting & performance tips
 - If you already have species and primer lists, substitute them into the quickstart commands above.
 
----
 
-## Contributing
-
-Contributions, bug reports and PRs are welcome. If you want me to add example species lists or helper scripts, tell me which format you prefer and I can add them.
