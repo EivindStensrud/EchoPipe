@@ -1,230 +1,291 @@
-# Tutorial: How to Use EchoPipe
-## Test run on Scandinavian amphibians and batra primers
+# Tutorial: How to use EchoPipe
+
+> Test run on Scandinavian amphibians and batra primers
 
 ## Background
-EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluating, and reformatting reference databases for environmental DNA (eDNA) metabarcoding studies. The tool allows for creating reference databases for every given taxa, primer set, and genetic region. 
 
-By utilizing an iterative workflow, computational workload, memory, and runtime are minimized while maximizing target taxonomic coverage. The entire pipeline is distributed as a Python package installable via `pip` with a unified command-line interface (`echopipe`).
+EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluating, and reformatting reference databases for environmental DNA (eDNA) metabarcoding studies. The tool allows for creating, refining, and exporting curated marker reference databases suitable for downstream taxonomic assignment.
+
+By utilizing an iterative workflow, computational workload, memory, and runtime are minimized while maximizing target taxonomic coverage. The entire pipeline is distributed as a Python package installable via pip.
 
 ---
 
-## Installation & Requirements
+## Installation & requirements
 
-### Mandatory Inputs & Dependencies
-* **[NCBI API Key](https://support.nlm.nih.gov/kbArticle/?pn=KA-05317)** *(Increases rate limits up to 10 requests/sec)*
-* **Species list with scientific names** (CSV or TXT)
-* **Email address** (for NCBI Entrez contact)
-* **Forward and Reverse primer sequences** spanning the target region (5'-3' orientation)
-* **Python ≥ 3.9**
+### Mandatory inputs & dependencies
 
-### Step-by-Step Installation
+- **NCBI API Key**: https://support.nlm.nih.gov/kbArticle/?pn=KA-05317 — increases Entrez rate limits (recommended).
+- **Species list** with scientific names (CSV or TXT).
+- **Email address** for NCBI Entrez contact.
+- **Forward and reverse primer sequences** spanning the target region (5'→3').
+- **Python 3.9+** (the tutorial and package were tested with Python 3.10).
 
-1. **Create and activate a virtual environment** (using `conda`):
-   ```bash
-   conda create -n echopipe python=3.10 -y
-   conda activate echopipe
+### Step-by-step installation
 
-Install EchoPipe via pip:
+1. Create and activate a virtual environment (example using conda):
 
-Bash
-pip install git+[https://github.com/EivindStensrud/EchoPipe.git](https://github.com/EivindStensrud/EchoPipe.git)
+```bash
+conda create -n echopipe python=3.10 -y
+conda activate echopipe
+```
 
-Verify Installation:
+2. Install EchoPipe from GitHub via pip:
 
-Bash
+```bash
+pip install git+https://github.com/EivindStensrud/EchoPipe.git
+```
+
+3. Verify the installation:
+
+```bash
 echopipe --help
+```
 
-<img width="982" height="1024" alt="Figure_1_workflow" src="https://github.com/user-attachments/assets/d2088ad1-da3c-4aa4-b14c-b1fa9c9e3785" />
 
-Figure 1. EchoPipe modular workflow for iterative database creation and curation. The pipeline architecture is divided into primary stages: Reference Template Generation (yellow), Sequence Retrieval and Database Creation (orange), Diagnostic Curation (dark orange), Database Completion/Evaluation (red), and Classifier Reformatting.
+![Figure 1: EchoPipe workflow](https://github.com/user-attachments/assets/d2088ad1-da3c-4aa4-b14c-b1fa9c9e3785)
 
-Stage 1: Generate Reference Template (template)
-The template subcommand generates an initial, uncurated marker reference database using primer alignment matching.
+_Figure 1. EchoPipe modular workflow for iterative database creation and curation._
 
-Create an initial template reference (template)  
-The template subcommand generates a template reference database.  
-Full Options for echopipe templateUncurated template generation arguments:  
-input_file: Txt or CSV file species names or a fasta file.  
--f, --forward: The forward primer used to find region of interest, (5'-3').  
--r, --reverse: The reverse primer used to find region of interest, (5'-3').  
--e, --email: Your email if NCBI needs to contact you.  
--a, --api_key: The user's NCBI API key.  
--q, --query: Custom query additions.  
--t, --threshold: The minimum length of a sequence (default: 150).  
--l, --length: The longest allowed sequence length (default: 22000).  
--m, --max: Number of sequences downloaded per species (default: 1).  
--p, --provided_sequences: Use a fasta file as reference template.  
--z, --longest_amplicon_size: Multiplier for median length (default: 2).  
--n, --random_subset: Number of random species to use.  
--sf, --subset_file: Path to a file containing a specific subset of species.  
--T, --threads: Number of parallel threads to use (default: auto-detected, max 7).  
+---
 
-Arguments used to finish the curated reference template database:  
--C, --Complete: Completes the reference template database.   
-input_file_species: Txt or CSV file species names.  
+## Overview of stages
 
-1. Build Initial Unaligned Template
-Bash
+EchoPipe is organized into modular stages (subcommands):
+
+- template — generate an initial (uncurated) reference template using primer matching.
+- create — mine NCBI for candidate sequences and extract marker regions via local BLAST.
+- curate — align extracted marker regions, apply length/quality filters, and flag problematic sequences.
+- complete — build the official database, merging curated content and removing flagged accessions.
+- evaluate — check completeness, monophyly, primer binding, and other diagnostics.
+- reformat — export reference databases in formats compatible with common taxonomic classifiers.
+
+---
+
+## Stage 1 — Generate reference template (echopipe template)
+
+The `template` subcommand generates an initial, uncurated marker reference database using primer alignment matching.
+
+Common options (template):
+
+```text
+input_file            # TXT/CSV with species names, or a FASTA with provided sequences
+-f, --forward         # Forward primer (5'-3')
+-r, --reverse         # Reverse primer (5'-3')
+-e, --email           # Contact email for NCBI Entrez
+-a, --api_key         # NCBI API key
+-q, --query           # Custom NCBI query additions
+-t, --threshold       # Minimum sequence length (default: 150)
+-l, --length          # Maximum sequence length (default: 22000)
+-m, --max             # Number of sequences downloaded per species (default: 1)
+-p, --provided_sequences  # Use a FASTA file as reference template
+-z, --longest_amplicon_size # Multiplier for median length (default: 2)
+-n, --random_subset   # Number of random species to use
+-sf, --subset_file    # Path to file with a specific subset of species
+-T, --threads         # Parallel threads (default: auto-detected, max 7)
+
+-C, --Complete        # Complete the reference template database (used during finalization)
+```
+
+Example: build an initial unaligned template
+
+```bash
 echopipe template Norwegian_swedish_amphibians_250214.csv \
   -f ACACCGCCCGTCACCCT \
   -r GTAYACTTACCATGTTACGACTT \
   -l 1000 \
-  -e your.email \
-  -a your.api.key \
+  -e your.email@example.com \
+  -a YOUR_NCBI_API_KEY \
   -t 40 \
   -m 5 \
-  -q "AND 12S"  
+  -q "AND 12S"
+```
 
+Inspect and clean the template alignment
 
-2. Inspect and Clean Template Alignment
-Open Reference_template_creation/aligned_sequences_to_curate.fasta in an MSA viewer (e.g., Jalview).
+1. Open `Reference_template_creation/aligned_sequences_to_curate.fasta` in an MSA viewer (e.g., Jalview).
+2. Color by nucleotide to view conserved regions.
+3. Verify sequences overlap forward and reverse primer binding sites.
+4. Remove obviously dubious or non-target sequences.
+5. Save the file without renaming or moving it (the pipeline expects the same path).
 
-Color alignment by nucleotide to view conserved regions.
+Complete the reference template (finalize)
 
-Verify that sequences overlap both forward and reverse primer binding sites.
-
-Remove obviously dubious sequences or non-target genomic fragments.
-
-Save the file without modifying its filename or relative directory path.
-
-3. Complete Reference Template
-Run the completion flag (-C) to build reference_template_database.fasta:  
-
-Bash
+```bash
 echopipe template unique_Norwegian_swedish_amphibians_250214.csv \
-  -e your.email \
-  -a your.api.key \
-  -C  
+  -e your.email@example.com \
+  -a YOUR_NCBI_API_KEY \
+  -C
+```
 
+---
 
-Stage 2: Create Reference Database (create)
-The create subcommand mines NCBI for candidate sequences, extracts local marker regions via local BLAST against the template database, and handles network disruptions automatically.
+## Stage 2 — Create reference database (echopipe create)
 
-Key CLI Options for echopipe create
-input_file: A txt file or CSV with a list of species names.  
-input_database: Path to the input reference database fasta file.  
--e, --email: User's email address.  
--a, --api_key: User's NCBI API key.  
--s, --sort: Sort by length (Not recommended).  
--c, --maxcount: Maximum accession numbers per species (default: 10000).  
--l, --maxlength: Longest allowed sequence length (default: 22000).  
--z, --ampliconsize: Minimum size an amplicon may be (default: 50).  
--m, --mitochondria: Search targets mitochondrial sequences.  
--r, --ribosomal: Search for mitochondrial 12S ribosomal DNA.  
--q, --query: Custom NCBI search term.  
--b, --batch_size: Batch size for downloading sequences (default: 5000).  
--t, --taxid: Use last saved taxid list.  
--E, --evalue: E-value for BLAST  (default: 20, indicating 5e-20). Increase for longer markers; keep lower for shorter markers to avoid introducing non-target gene regions.  
--R, --repeat: Repeat curation on previously downloaded sequences.  
--T, --threads: Number of parallel threads to use (default: auto-detected, max 7).  
+The `create` subcommand mines NCBI for candidate sequences, extracts local marker regions via local BLAST against the template database, and includes automatic retry logic for network disruptions.
 
-Tip (E-Value Selection): Keep the E-value lower (less strict, ex. 15) for shorter markers to avoid introducing non-target gene regions. Increase the E-value (stricter, ex. 40) for longer markers to avoid introducing non-target gene regions.
+Key options (create):
 
-Standard Database Creation Command
-Bash
+```text
+input_file      # TXT/CSV species list
+input_database  # Path to reference template FASTA
+-e, --email     # Email address
+-a, --api_key   # NCBI API key
+-s, --sort      # Sort by length (not recommended)
+-c, --maxcount  # Max accession numbers per species (default: 10000)
+-l, --maxlength # Max sequence length allowed (default: 22000)
+-z, --ampliconsize # Minimum amplicon size (default: 50)
+-m, --mitochondria  # Target mitochondrial sequences
+-r, --ribosomal  # Target mitochondrial 12S rDNA
+-q, --query     # Custom NCBI query
+-b, --batch_size# Batch size for downloads (default: 5000)
+-t, --taxid     # Use saved taxid list
+-E, --evalue    # E-value for BLAST (default: 20 => 5e-20)
+-R, --repeat    # Repeat curation on previously downloaded sequences
+-T, --threads   # Parallel threads (default: auto-detected, max 7)
+```
+
+Tip (E-value selection): keep the E-value lower for shorter markers (e.g., 15) and increase for longer markers if needed.
+
+Example: standard database creation
+
+```bash
 echopipe create unique_Norwegian_swedish_amphibians_250214.csv reference_template_database.fasta \
-  -e your.email \
-  -a your.api.key \
+  -e your.email@example.com \
+  -a YOUR_NCBI_API_KEY \
   -E 20 \
   -b 5000 \
   -T 4
+```
 
+Output database header format
 
-Output Database Header Format
-Dereplicated sequences track abundance using an appended sequence counter:
+Dereplicated sequences track abundance using an appended sequence counter. Example header and sequence:
 
-Plaintext
+```text
 >gb|Accession_number|NCBI_taxonomy|counter
-Sequence_data
+SEQUENCE_DATA
+```
 
 Example:
+
+```text
 >gb|KJ858774.1|Eukaryota;Chordata;Amphibia;Anura;Alytidae;Alytes;Alytes_obstetricans|2
 ACACCGCCCGTCACCCTCCTCAACTAACTCAACCCCCTAACTAAAAGCTAACTGGTTAACAAGAAGAGGCAAGTCGTAACATGGTAAGTATA
-Stage 3: Curate Database (curate)
-The curate subcommand aligns extracted marker regions, applies strict sequence length boundary controls, builds FastTree gene trees, and flags potential misannotations or paralogs.
+```
 
-CLI Options for echopipe curate
-input_file: Database to revise.  
--o, --old_database: The previous version of database.  
--N, --number_ns: Number of N's and ambiguous nucleotides allowed (default: 0).  
--M, --mafft_online: Path to MAFFT online alignment file.  
---min_length: Minimum sequence length to keep (default: 150).  
---max_length: Maximum sequence length to keep.  
+---
 
-Execution Command with Target Bounds
-Bash
+## Stage 3 — Curate database (echopipe curate)
+
+The `curate` subcommand aligns extracted marker regions, applies strict length/ambiguity filters, builds FastTree gene trees, and flags potential misannotations or paralogs.
+
+Options (curate):
+
+```text
+input_file          # Database to revise (FASTA)
+-o, --old_database  # Previous database version
+-N, --number_ns     # Allowed number of N/ambiguous nucleotides (default: 0)
+-M, --mafft_online  # Path to MAFFT online alignment file
+--min_length        # Minimum sequence length to keep (default: 150)
+--max_length        # Maximum sequence length to keep
+```
+
+Example execution with target bounds
+
+```bash
 echopipe curate BLAST_results/2026-03-17_1_to_curate.fasta \
   --min_length 200 \
   --max_length 600 \
   -N 0
+```
 
-Diagnostic Curation Output Files
-Database_curation/{date}/{date}_{run_number}_aligned.fasta: Aligned dataset (* marking new sequences).
+Diagnostic curation output (examples):
 
-Database_curation/{date}/{date}_{run_number}_tree_string.newick: Gene tree for visualization in iTOL or TreeViewer.
+- `Database_curation/{date}/{date}_{run}_aligned.fasta` — aligned dataset (* marks new sequences)
+- `Database_curation/{date}/{date}_{run}_tree_string.newick` — gene tree for visualization
+- `Database_curation/{date}/{date}_{run}_duplicate_sequences.txt` — identical sequences across species
+- `Database_curation/{date}/{date}_{run}_sequences_to_delete.txt` — user file to list misannotated accessions to exclude
 
-Database_curation/{date}/{date}_{run_number}_duplicate_sequences.txt: Identical sequences shared across different species.
+Options used by the `complete` subcommand
 
-Database_curation/{date}/{date}_{run_number}_sequences_to_delete.txt: User text file where misannotated accession numbers are placed to exclude them from the final database.
+```text
+-b, --blast_file     # New database BLAST file
+-c, --curated_file   # Curated aligned FASTA
+-o, --old_database   # Existing master database
+-u, --updated_database # Output database (default: database.fasta)
+```
 
-CLI Options for echopipe complete
--b, --blast_file: New database BLAST file.  
--c, --curated_file: Curated aligned FASTA.  
--o, --old_database: Existing master database.  
--u, --updated_database: Output database (default: database.fasta).  
+---
 
-Stage 4: Complete Official Database (complete)
-Once misannotated accession numbers are added to sequences_to_delete.txt, finalize your official reference database.
+## Stage 4 — Complete official database (echopipe complete)
 
-Initial Database Finalization
-Bash
+Once misannotated accession numbers are recorded in `sequences_to_delete.txt`, finalize your official reference database.
+
+Initial finalization example:
+
+```bash
 echopipe complete \
   -b BLAST_results/2026-03-17_1_to_curate.fasta \
   -c Database_curation/2026-03-17_1/2026-03-17_1_aligned.fasta \
   -u Amphibian_2026-03-17_1.fasta
+```
 
+Updating an existing database (merge new data while preserving counters):
 
-Updating an Existing Database Version
-Merging new NCBI data into a previous EchoPipe database version preserves historical counters:
-
-Bash
+```bash
 echopipe complete \
   -b BLAST_results/2026-03-17_2_to_curate.fasta \
   -u Amphibian_2026-03-17_2.fasta \
   -o Amphibian_2026-03-17_1.fasta
+```
 
-Generated Visualizations
-Stage 5: Evaluate Database (evaluate)
-The evaluate subcommand tests database completeness, taxid resolution, GC-content distribution, monophyly, and primer binding compatibility.
+---
 
-CLI Options for echopipe evaluate
-reference_database: Path to the reference database.  
-monophyletic_group: Path to the monophyletic groups text file.  
--f, --forward_primer: The forward primer sequence to check (5'-3').  
--r, --reverse_primer: The reverse primer sequence to check (5'-3').  
+## Stage 5 — Evaluate database (echopipe evaluate)
 
-Bash
+The `evaluate` subcommand tests database completeness, taxid resolution, GC-content distribution, monophyly, and primer binding compatibility.
+
+Options (evaluate):
+
+```text
+reference_database      # Path to reference FASTA
+monophyletic_group     # Path to monophyletic groups txt file
+-f, --forward_primer   # Forward primer (5'-3')
+-r, --reverse_primer   # Reverse primer (5'-3')
+```
+
+Example:
+
+```bash
 echopipe evaluate Amphibian_2026-03-17_1.fasta \
   Database_curation/2026-03-17_1/Curated_content/2026-03-17_1_post_curation_monophyletic_group.txt \
   -f ACACCGCCCGTCACCCT \
   -r GTAYACTTACCATGTTACGACTT
-Primer Mismatch & Proportions Output
-Upon completion, evaluate provides a soft suggestion to reformat the database for downstream taxonomic assignment classifiers.
+```
 
-Stage 6: Reformat for Taxonomic Classifiers (reformat)
-The reformat subcommand converts official EchoPipe reference databases into header formats compatible with major bioinformatics tools.
+After evaluation, the tool provides primer-mismatch statistics and soft suggestions for reformatting the database for downstream classifiers.
 
-Supported Formats
-Format Code	Target Classifier	Example Header Output
-sintax	SINTAX	>ACC;tax=d:Eukaryota,p:Chordata,c:Amphibia...
-rdp	RDP Classifier	>ACC\troot;Eukaryota;Chordata;Amphibia...
-dadt	DADA2 assignTaxonomy	>Eukaryota;Chordata;Amphibia;Anura;Alytidae;Alytes
-dads	DADA2 assignSpecies	>ACC Alytes obstetricans
-idt	IDTAXA	>Root;Eukaryota;Chordata;Amphibia;Anura;Alytidae...
-qiime	QIIME 2	>ACC (+ companion 2-column taxonomy .txt file)
-Example Reformat Commands
-Bash
-# Reformat for QIIME 2 (generates .fasta and .txt taxonomy mapping file)
+---
+
+## Stage 6 — Reformat for taxonomic classifiers (echopipe reformat)
+
+Convert official EchoPipe references into header formats compatible with common taxonomic classifiers.
+
+Supported formats example (code, target, header):
+
+| Format code | Target classifier         | Example header output (brief) |
+|-------------|--------------------------|-------------------------------|
+| sintax      | SINTAX                   | >ACC;tax=d:Eukaryota,p:Chordata,c:Amphibia... |
+| rdp         | RDP Classifier           | >ACC\troot;Eukaryota;Chordata;Amphibia...      |
+| dadt        | DADA2 assignTaxonomy     | >Eukaryota;Chordata;Amphibia;Anura;Alytidae;Alytes |
+| dads        | DADA2 assignSpecies      | >ACC Alytes obstetricans                        |
+| idt         | IDTAXA                   | >Root;Eukaryota;Chordata;Amphibia;Anura;Alytidae... |
+| qiime       | QIIME 2                  | >ACC (+ companion taxonomy .txt file)           |
+
+Example reformat commands:
+
+```bash
+# Reformat for QIIME 2 (generates a FASTA and companion 2-column taxonomy .txt)
 echopipe reformat Amphibian_2026-03-17_1.fasta qiime
 
 # Reformat for DADA2 assignTaxonomy
@@ -232,22 +293,31 @@ echopipe reformat Amphibian_2026-03-17_1.fasta dadt
 
 # Reformat for SINTAX
 echopipe reformat Amphibian_2026-03-17_1.fasta sintax
+```
 
+---
 
-# Troubleshooting & Performance Tips
-Handling NCBI Connection Issues (IncompleteRead(0 bytes read))
-High-volume species (e.g., model organisms like Aquarana catesbeiana) can cause NCBI's Entrez server to drop HTTP streams.
+## Troubleshooting & performance tips
 
-EchoPipe includes adaptive download logic:
+### Handling NCBI connection issues (IncompleteRead / 0 bytes read)
 
-Initial Run: Attempts download using your specified -b / --batch_size (default: 5000).
+High-volume species or large searches can cause NCBI Entrez HTTP streams to drop. EchoPipe includes adaptive download logic:
 
-First Retry: Re-attempts download with the same batch size after a 10-second pause.
+- Initial run: uses `-b/--batch_size` (default 5000).
+- First retry: re-attempt with same batch size after a 10s pause.
+- Subsequent retries: dynamically halves the batch size (2500 → 1250 → 250) to avoid timeouts.
 
-Subsequent Retries: Dynamically halves the batch size (2500 → 1250 → 250) to bypass server timeouts.
+If network failures persist, manually reduce threads and batch size:
 
-If persistent network failures occur, manual overrides can be applied:
-
-Bash
+```bash
 # Lower worker threads (-T) and batch size (-b) for unstable connections
 echopipe create species.txt ref_template.fasta -e user@mail.com -a API_KEY -T 2 -b 1000
+```
+
+---
+
+If you'd like, I can also:
+
+- Split this tutorial into a README-style quickstart and a longer user guide,
+- Add code-syntax highlighting for each command and option table, or
+- Create small example species lists and dataset fixtures to reproduce the demo run.
