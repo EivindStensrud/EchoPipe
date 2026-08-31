@@ -1,0 +1,36 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Conda environments
+.conda/
+.conda_env/
+
+# EchoPipe specific / Bioinformatics files
+# (Uncomment these if you don't want to upload large databases to GitHub)
+# *.fasta
+# *.fas
+# *.aln
+# *.tree
+# *.nhx
+# temp/
+# tmp/

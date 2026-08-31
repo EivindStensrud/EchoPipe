@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echopipe"
+version = "1.0.0"
+description = "EchoPipe: A complete pipeline for reference database creation and curation in eDNA studies."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Eivind Stensrud", email = "eivind@ednasolutions.se" },
+    { name = "Daniel Borg" },
+    { name = "Alexander Eiler" }
+]
+dependencies = [
+    "biopython>=1.83",
+    "pandas>=2.2.2",
+    "numpy>=1.26.4",
+    "matplotlib>=3.9.2",
+    "tqdm>=4.66.4",
+    "ete3>=3.1.3"
+]
+
+[project.scripts]
+echopipe = "echopipe:main"
+
+[tool.setuptools]
+py-modules = ["echopipe"]
