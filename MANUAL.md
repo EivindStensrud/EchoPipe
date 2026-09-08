@@ -1,204 +1,146 @@
-# NAME
-**echopipe** - automated eDNA reference database generation, curation, evaluation, and reformatting pipeline
+# EchoPipe Manual
 
-# SYNOPSIS
-**echopipe** *subcommand* [*options*] [*arguments*]
-
-**echopipe template** *input_file* [**-f** *forward*] [**-r** *reverse*] [**-e** *email*] [**-a** *api_key*] [*options*]
-
-**echopipe create** *input_file* *input_database* [**-e** *email*] [**-a** *api_key*] [*options*]
-
-**echopipe curate** *input_file* [*options*]
-
-**echopipe complete** [**-b** *blast_file*] [**-c** *curated_file*] [**-u** *updated_database*] [*options*]
-
-**echopipe evaluate** *reference_database* *monophyletic_group* [*options*]
-
-**echopipe reformat** *reference_database* *format*
-
-# DESCRIPTION
-**EchoPipe** is a comprehensive bioinformatics pipeline designed to create, clean, evaluate, and export custom environmental DNA (eDNA) reference databases. It mines sequence data from NCBI Entrez/BLAST, extracts target regions using local alignment matching, identifies monophyletic and polyphyletic species boundaries, handles network interruptions dynamically, and formats headers for popular taxonomic classifiers.
-
-The pipeline is entirely modular and iterative, ensuring previously validated sequences are preserved (via an abundance counter) rather than re-downloaded.
-
-# SUBCOMMANDS AND OPTIONS
-
-## 1. template
-Generates an initial, uncurated marker reference database using primer alignment matching.
-
-**Required arguments for initial generation:**
-* **`input_file`**
-  Txt or CSV file containing species names, or a FASTA file (requires `-p`).
-* **`-f, --forward`** *STRING*
-  The forward primer sequence spanning the region of interest (5'-3').
-* **`-r, --reverse`** *STRING*
-  The reverse primer sequence spanning the region of interest (5'-3').
-* **`-e, --email`** *STRING*
-  Email address for NCBI Entrez connection.
-* **`-a, --api_key`** *STRING*
-  NCBI API key to allow faster downloads (10 requests/sec).
-
-**Optional arguments:**
-* **`-q, --query`** *STRING*
-  Custom NCBI search query additions (e.g., `"AND 12S"` or `"NOT 18S"`).
-* **`-t, --threshold`** *INT*
-  The minimum sequence length including primers. Shorter sequences are discarded (default: 150).
-* **`-l, --length`** *INT*
-  The maximum allowed sequence length downloaded from NCBI (default: 22000).
-* **`-m, --max`** *INT*
-  Maximum number of sequences downloaded per species (default: 1).
-* **`-p, --provided_sequences`**
-  Flag indicating the input file is an existing FASTA file to be used as a template.
-* **`-z, --longest_amplicon_size`** *FLOAT*
-  Multiplier for median sequence length to discard abnormally long amplicons (default: 2).
-* **`-n, --random_subset`** *INT*
-  Number of random species to subset for template creation.
-* **`-sf, --subset_file`** *FILE*
-  Path to a text file containing a specific subset of species to use.
-* **`-T, --threads`** *INT*
-  Number of parallel worker threads. Capped at 7 to respect NCBI limits.
-
-**Completion flag:**
-* **`-C, --Complete`**
-  Finalizes the reference template generation after manual alignment inspection. (Used in a subsequent run).
+EchoPipe is a complete pipeline for reference database creation and curation. The script `echopipe.py` is divided into six main subcommands: `template`, `create`, `curate`, `complete`, `evaluate`, and `reformat`.
 
 ---
+## 1. `template`
+Generate a template reference database.
 
-## 2. create
-Mines NCBI for candidate sequences, extracts local marker regions via BLAST against the template database, and automatically manages download retries.
+**Positional Arguments:**
+* **`input_file`**: Txt or CSV file species names or a fasta file.
+* **`input_file_species`**: Txt or CSV file species names (used specifically when completing the template with the `-C` flag).
 
-**Required arguments:**
-* **`input_file`**
-  A txt file or CSV with a list of species names.
-* **`input_database`**
-  Path to the generated reference template FASTA file.
+**Optional Arguments:**
+* **`-f, --forward`**: The forward primer used to find region of interest, (5'-3').
+* **`-r, --reverse`**: The reverse primer used to find region of interest, (5'-3').
+* **`-e, --email`**: Your email if NCBI needs to contact you (default: `email@email.com`).
+* **`-a, --api_key`**: The user's NCBI API key (default: `api_key`).
+* **`-q, --query`**: Custom query additions.
+* **`-t, --threshold`**: The minimum length of a sequence (default: `150`).
+* **`-l, --length`**: The longest allowed sequence length (default: `22000`).
+* **`-m, --max`**: Number of sequences downloaded per species (default: `1`).
+* **`-p, --provided_sequences`**: Use a fasta file as reference template.
+* **`-z, --longest_amplicon_size`**: Multiplier for median length (default: `2.0`).
+* **`-n, --random_subset`**: Number of random species to use.
+* **`-sf, --subset_file`**: Path to a file containing a specific subset of species, typically a taxonomically diverse group of the target taxa.
+* **`-T, --threads`**: Number of parallel threads to use (default: auto-detected, max 7).
+* **`--rate_limit`**: Max requests per second for NCBI API (default: 7.0 with API key, 2.5 without).
+* **`-C, --Complete`**: Completes the reference template database.
 
-**NCBI Credentials (Required unless repeating):**
-* **`-e, --email`** *STRING*
-* **`-a, --api_key`** *STRING*
+### Example Usage:
+**Initial run:**
+```
+bash
+python echopipe.py template species_list.csv -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -e email@email.com -a your_api_key
+```
 
-**Optional arguments:**
-* **`-c, --maxcount`** *INT*
-  Maximum accession numbers requested per species (default: 10000).
-* **`-b, --batch_size`** *INT*
-  Sequence download chunk size (default: 5000). Automatically halves if NCBI drops the connection.
-* **`-l, --maxlength`** *INT*
-  Maximum allowed sequence length (default: 22000).
-* **`-z, --ampliconsize`** *INT*
-  Minimum size an extracted amplicon may be (default: 50).
-* **`-E, --evalue`** *INT*
-  E-value exponent for BLAST filtering (default: 20, corresponding to 5e-20).
-* **`-m, --mitochondria`**
-  Appends `AND mitochondrion[filter]` to the NCBI query.
-* **`-r, --ribosomal`**
-  Appends `AND 12S` to the NCBI query.
-* **`-q, --query`** *STRING*
-  Custom NCBI search term addition.
-* **`-s, --sort`**
-  Sort downloads by sequence length (not recommended).
-* **`-t, --taxid`**
-  Use the previously saved TaxID list from the working directory.
-* **`-R, --repeat`**
-  Repeat curation on previously downloaded sequences without contacting NCBI.
-* **`-T, --threads`** *INT*
-  Parallel worker threads (auto-detected, capped at 7).
+**Initial run, completion of template after manual curation:**
+```  
+bash 
+python echopipe.py template -C unique_species_list.csv
+```
+---
+## 2. `create`
+Mine NCBI for reference sequences and creates a BLAST-ready database.
 
+**Positional Arguments:**
+* **`input_file`**: A txt file or CSV with a list of species names.
+* **`input_database`**: Path to the input reference database fasta file.
+
+**Optional Arguments:**
+* **`-e, --email`**: User's email address (default: `email@email.com`).
+* **`-a, --api_key`**: User's NCBI API key (default: `api_key`).
+* **`-s, --sort`**: Sort by length (Not recommended).
+* **`-c, --maxcount`**: Maximum accession numbers per species (default: `10000`).
+* **`-l, --maxlength`**: Longest allowed sequence length (default: `22000`).
+* **`-z, --ampliconsize`**: Minimum size an amplicon may be (default: `50`).
+* **`-m, --mitochondria`**: Search targets mitochondrial sequences.
+* **`-r, --ribosomal`**: Search for mitochondrial 12S ribosomal DNA.
+* **`-q, --query`**: Custom NCBI search term.
+* **`-b, --batch_size`**: Batch size for downloading sequences (default: `5000`).
+* **`-t, --taxid`**: Use last saved taxid list.
+* **`-E, --evalue`**: E-value for BLAST (default: `20`). Increase for longer markers; keep lower for shorter markers to avoid introducing non-target gene regions.
+* **`-R, --repeat`**: Repeat curation on previously downloaded sequences.
+* **`-T, --threads`**: Number of parallel threads to use (default: auto-detected, max 7).
+* **`--rate_limit`**: Max requests per second for NCBI API (default: 7.0 with API key, 2.5 without).
+
+**Initial run, create the raw reference database:**
+
+```
+bash 
+python echopipe.py create species_list.csv reference_template_database.fasta
+```
+---
+## 3. `curate`
+Align and generate trees for manual curation.
+
+**Positional Arguments:**
+* **`input_file`**: Database to revise.
+
+**Optional Arguments:**
+* **`-o, --old_database`**: The previous version of database.
+* **`-N, --number_ns`**: Number of N's and ambiguous nucleotides allowed (default: `0`).
+* **`-M, --mafft_online`**: Path to MAFFT online alignment file.
+* **`--min_length`**: Minimum sequence length to keep (default: `150`).
+* **`--max_length`**: Maximum sequence length to keep (default: infinity).
+* **`-f, --forward-primer`**: Forward primer sequence.
+* **`-r, --reverse-primer`**: Reverse primer sequence.
+
+```
+bash 
+python echopipe.py curate BLAST_results/{date}_{run_number}_to_curate.fasta --min_length 150 and --max_length 250
+```
+---
+## 4. `complete`
+Filter, merge, and finalize the database.
+
+**Optional Arguments:**
+* **`-b, --blast_file`**: New database BLAST file.
+* **`-c, --curated_file`**: Curated aligned FASTA.
+* **`-o, --old_database`**: Existing master database.
+* **`-u, --updated_database`**: Name of your new database, (default: `database_{date}_{run_number}.fasta`).
+
+```
+bash
+python echopipe.py complete -b BLAST_results/{date}_{run_number}_to_curate.fasta -c Database_curation/{date}_{run_number}/{date}_{run_number}_aligned.fasta -u Database_name_{date}_{run_number}.fasta
+```
+---
+## 5. `evaluate`
+Evaluate the database (GC content, primers).
+
+**Positional Arguments:**
+* **`reference_database`**: Path to the reference database.
+* **`monophyletic_group`**: Path to the monophyletic groups text file.
+
+**Optional Arguments:**
+* **`-f, --forward_primer`**: The forward primer sequence to check (5'-3').
+* **`-r, --reverse_primer`**: The reverse primer sequence to check (5'-3').
+```
+bash
+python echopipe.py evaluate Database_name_{date}_{run_number}.fasta Database_curation/{date}_{run_number}/Curated_content/{date}_{run_number}_post_curation_monophyletic_group.txt
+```
 ---
 
-## 3. curate
-Performs sequence quality control, length boundary filtering, MAFFT alignment, and phylogenetic tree construction (FastTree) for manual taxonomic inspection.
+## 6. `reformat`
+Reformat database headers for popular taxonomic classifiers.
 
-**Required arguments:**
-* **`input_file`**
-  Path to the uncurated BLAST output database (e.g., `BLAST_results/..._to_curate.fasta`).
+**Positional Arguments:**
+* **`reference_database`**: The reference database for which the header format will be changed.
+* **`format`**: Write in one of the available formats: 
+  * `sintax` = SINTAX
+  * `rdp` = Ribosomal Database Project (RDP)
+  * `dadt` = DADA2 assignTaxonomy
+  * `dads` = DADA2 assignSpecies
+  * `idt` = IDTAXA
+  * `qiime` = QIIME 2
+ 
+## 7. `updating the database`
+To update an existing reference database with newly available sequences from NCBI or to expand the sequence coverage, run the create command again.
 
-**Optional arguments:**
-* **`--min_length`** *INT*
-  Minimum sequence length to retain. Shorter fragments are dropped prior to alignment (default: 150).
-* **`--max_length`** *INT*
-  Maximum sequence length to retain. Longer sequences are dropped prior to alignment.
-* **`-N, --number_ns`** *INT*
-  Maximum allowable ambiguous nucleotides (`N`s) per sequence (default: 0).
-* **`-o, --old_database`** *FILE*
-  Path to a previous version of the curated database.
-* **`-M, --mafft_online`** *FILE*
-  Path to a pre-aligned file if MAFFT was run externally/online.
+If a species exceeded the previous download limit, you can run create with an increased maximum count (-c), add a specific query filter (e.g., --query "12s"), or run it at a later time when new accession numbers are published. New accession numbers will be automatically detected and processed against your master database.
 
----
-
-## 4. complete
-Fills missing taxonomic hierarchy levels, merges new sequences with older database versions, and finalizes the official FASTA file.
-
-**Arguments:**
-* **`-b, --blast_file`** *FILE*
-  The new database BLAST file (`..._to_curate.fasta`).
-* **`-c, --curated_file`** *FILE*
-  The manually inspected, aligned FASTA file.
-* **`-o, --old_database`** *FILE*
-  Path to the existing master database to update/merge.
-* **`-u, --updated_database`** *STRING*
-  Filename for the finalized output database (default: `database.fasta`).
-
----
-
-## 5. evaluate
-Generates summary coverage dataframes, monophyletic/polyphyletic group diagnostics, and optional primer binding mismatch visual checks.
-
-**Required arguments:**
-* **`reference_database`**
-  Path to the finalized reference FASTA database.
-* **`monophyletic_group`**
-  Path to the `..._post_curation_monophyletic_group.txt` file generated during the `complete` stage.
-
-**Optional arguments:**
-* **`-f, --forward_primer`** *STRING*
-  Forward primer sequence to evaluate binding mismatches (5'-3').
-* **`-r, --reverse_primer`** *STRING*
-  Reverse primer sequence to evaluate binding mismatches (5'-3').
-
----
-
-## 6. reformat
-Reformats the finalized database headers and generates companion taxonomy files required by third-party classifiers.
-
-**Required arguments:**
-* **`reference_database`**
-  Path to the finalized reference database.
-* **`format`**
-  Specifies the target classifier format. Must be one of:
-  * `sintax` - SINTAX format (`>ACC;tax=d:...,p:...`)
-  * `rdp` - Ribosomal Database Project format
-  * `dadt` - DADA2 `assignTaxonomy` header format
-  * `dads` - DADA2 `assignSpecies` header format
-  * `idt` - IDTAXA format (`>Root;Domain;...`)
-  * `qiime` - QIIME 2 FASTA and companion 2-column taxonomy `.txt` file
-
-# TROUBLESHOOTING & NCBI RATE LIMITS
-When processing high-volume taxa, NCBI Entrez may drop HTTP connections, resulting in `IncompleteRead(0 bytes read)` errors.
-
-**Adaptive Chunking:**
-EchoPipe automatically handles this by retrying the chunk once. If it fails again, it dynamically halves the batch size (e.g., 5000 → 2500 → 1250) to allow large species to pass without crashing the pipeline.
-
-**Manual Intervention:**
-If connection errors persist on your network, manually lower the thread count and batch size:
-`echopipe create species.txt ref.fasta -T 2 -b 1000`
-
-# EXAMPLES
-
-**1. Create a reference template using a random subset of 50 species:**
-`echopipe template species.txt -f ACACCGCCCG -r GTAYACTTACC -n 50 -e user@mail.com -a API_KEY`
-
-**2. Mine target marker sequences with strict E-value filtering:**
-`echopipe create species.txt ref_template.fasta -e user@mail.com -a API_KEY -E 20 -b 5000`
-
-**3. Curate sequences by applying strict length boundaries:**
-`echopipe curate BLAST_results/run_to_curate.fasta --min_length 200 --max_length 600 -N 0`
-
-**4. Reformat the final database for QIIME 2:**
-`echopipe reformat Database_2026.fasta qiime`
-
-# AUTHOR
-EchoPipe Development Team.
-
-# SEE ALSO
-mafft(1), fasttree(1), blastn(1)
+Example Usage (Updating with a higher count, a custom query and the old reference database as template)
+```
+bash
+python echopipe.py create unique_species_list.csv Database_name_{date}_{run_number}.fasta -c 20000 --query "12s" -e email@email.com -a your_api_key
+```
