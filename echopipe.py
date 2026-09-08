@@ -23,6 +23,13 @@ from datetime import datetime
 from io import StringIO
 from Bio.SeqUtils import gc_fraction
 import json
+import socket
+from Bio.Seq import Seq
+import re
+from Bio.SeqRecord import SeqRecord
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Warning Suppression
 warnings.simplefilter("ignore", FutureWarning)
@@ -46,11 +53,80 @@ from Bio.Seq import reverse_complement
 from ete3 import PhyloTree
 from tqdm import tqdm
 from urllib.error import HTTPError
+from threading import Lock
+
+class NCBIThrottler:
+    """Enforces a global rate limit across all threads for NCBI Entrez API calls."""
+    def __init__(self, max_rate=2.5):
+        self.lock = Lock()
+        self.last_time = 0.0
+        self.update_rate(max_rate)
+
+    def update_rate(self, max_rate):
+        """Dynamically adjusts rate limits once API key presence is known."""
+        with self.lock:
+            self.interval = 1.0 / max_rate
+
+    def acquire(self):
+        """Forces caller thread to wait until rate threshold allows execution."""
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_time
+            if elapsed < self.interval:
+                time.sleep(self.interval - elapsed)
+            self.last_time = time.time()
+
+# Instantiate globally with non-API default (2.5 req/sec safety)
+ncbi_limiter = NCBIThrottler(max_rate=2.5)
 
 
 # =============================================================================
 # SHARED UTILITIES (All Pipeline Helpers)
 # =============================================================================
+def strip_ansi(text):
+    """Removes ANSI color escape codes for clean log files."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+def get_previous_database_by_size(current_output_name, reference_file=None):
+    """
+    Scans the current directory for the largest FASTA file to suggest as the previous database.
+    Excludes the new database being created, reference templates, and temporary files.
+    """
+    # Grab all fasta files in the current root directory
+    fasta_files = glob.glob("*.fasta")
+    valid_dbs = []
+    
+    for f in fasta_files:
+        file_name = os.path.basename(f)
+        file_name_lower = file_name.lower()
+        
+        # 1. Exclude the database we are currently trying to generate
+        if file_name == current_output_name:
+            continue
+            
+        # 2. Exclude the reference template (by exact name if provided)
+        if reference_file and file_name == os.path.basename(reference_file):
+            continue
+            
+        # 3. Exclude files that have "reference" or "template" in the name as a fallback
+        if "reference" in file_name_lower or "template" in file_name_lower:
+            continue
+            
+        # 4. Exclude pipeline intermediate files (just in case they are in the root)
+        if file_name_lower.startswith("temp_") or file_name_lower.endswith("_aligned.fasta"):
+            continue
+            
+        valid_dbs.append(f)
+        
+    if not valid_dbs:
+        return None
+        
+    # Sort the remaining files by file size, descending (largest first)
+    valid_dbs.sort(key=lambda x: os.path.getsize(x), reverse=True)
+    
+    # Return the largest file
+    return valid_dbs[0]
 
 def save_config(email, api_key, forward="", reverse="", config_file="Log_files/config.json"):
     """Saves user credentials and primers to avoid typing them repeatedly."""
@@ -75,10 +151,10 @@ def get_command_string():
     return ' '.join(sys.argv)
 
 def append_and_print_message(log_file, msg):
-    """Prints a message to the console and appends it to the unified log file."""
+    """Prints a message to the console with color and appends clean text to the log file."""
     if log_file:
         with open(log_file, "a") as file:
-            file.write(msg)
+            file.write(strip_ansi(msg))
     print(msg)
 
 def read_counter(counter_file, date=None):
@@ -278,23 +354,10 @@ def suggest_parallelism_fix(log_file=None):
 
 
 def repeated_failures(consecutive_fail_counter, log_file, check_for_fail, type_of_download):
-    """Monitors consecutive errors and pauses or kills the program if thresholds are met."""
-    if consecutive_fail_counter == 2:
-        msg = "\nTwo consecutive download errors encountered. Pausing for 10 minutes before reattempting.\n"
+    """Monitors consecutive errors and logs them without freezing worker threads."""
+    if consecutive_fail_counter >= 3:
+        msg = f"\nWarning: Multiple consecutive download errors encountered during {type_of_download}.\n"
         append_and_print_message(log_file, msg)
-        time.sleep(600)
-    elif consecutive_fail_counter == 3:
-        msg = "\nErrors persist. Shutting down the program."
-        if check_for_fail:
-            with open(log_file, "a") as file:
-                file.write(f'\n{type_of_download} finished with errors:\n')
-                file.write('\n'.join(check_for_fail) + '\n')
-        append_and_print_message(log_file, msg)
-        
-        # Display the troubleshooting guidance before exiting
-        suggest_parallelism_fix(log_file)
-        
-        sys.exit()
 
 def loop_finished(check_for_fail, log_file, type_of_download, loop_duration):
     """Appends summary of a finished download loop to the log file."""
@@ -375,82 +438,102 @@ def number_threads(user_threads=None):
 def process_species_taxonomy(species, filtered_species_collection, taxonomic_ranks, max_retries):
     """Download and process species taxonomy data from NCBI."""
     retry_delay = 10
-    consecutive_fail_counter = 0
 
-    for i in range(max_retries):
+    for attempt in range(max_retries):
         try:
-            # Performs an esearch where we are interested in the taxids from the species in the list.
+            # PACE OUTGOING REQUEST
+            ncbi_limiter.acquire()
+            # Performs an esearch for the taxid of the species
             taxid_handle = Entrez.esearch( 
                 db="Taxonomy", 
-                term=species,
+                term=species.strip(),
                 retmode="xml",
                 usehistory="y"
             )
             taxid_record = Entrez.read(taxid_handle)
             taxid_handle.close()
-            taxid = taxid_record["IdList"]
 
-            time.sleep(0.5)
+            taxid_list = taxid_record.get("IdList", [])
+            count = int(taxid_record.get("Count", 0))
 
-            # Check if search came out negative
-            if taxid_record["Count"] == str(0) or "ErrorList" in taxid_record:  
+            # 1. Check if search came out negative or returned empty IdList
+            if count == 0 or not taxid_list or "ErrorList" in taxid_record:  
                 return {'species_not_found': species}
-            # Check for duplicate entry
-            elif any(taxid[0] == line.split(';')[1].strip() for line in filtered_species_collection):  
+            
+            current_taxid = taxid_list[0]
+
+            # 2. Check for duplicate entry safely
+            if any(current_taxid == line.split(';')[1].strip() for line in filtered_species_collection if ';' in line):  
                 return {'duplicate_species': species}
-            else:
-                webenv = taxid_record["WebEnv"]
-                query_key = taxid_record["QueryKey"]
 
-                fetch_handle = Entrez.efetch(
-                    db="Taxonomy",
-                    retmode="xml",
-                    webenv=webenv,
-                    query_key=query_key
-                )
-                fetch_taxonomy_data = Entrez.read(fetch_handle)
-                fetch_handle.close()
+            webenv = taxid_record.get("WebEnv")
+            query_key = taxid_record.get("QueryKey")
 
-                scientific_name = fetch_taxonomy_data[0]["ScientificName"]
-                LineageEx = fetch_taxonomy_data[0]["LineageEx"]
-                taxa_rank_list = []
+            if not webenv or not query_key:
+                return {'species_not_found': species}
 
-                for taxonomic_rank in taxonomic_ranks:
-                    taxonomic_rank_exist = False 
+            ncbi_limiter.acquire()
 
-                    for item in LineageEx: 
-                        if item.get("Rank") == taxonomic_rank: 
-                            taxonomic_rank_exist = True 
-                            tax_name = (item["ScientificName"])
-                            cleaned_taxa_name = re.match(r'([^:;(\s]+)', tax_name)
-                            if cleaned_taxa_name:
-                                cleaned_taxa_name = cleaned_taxa_name.group(0).strip()
-                            else:
-                                cleaned_taxa_name = tax_name
-                                
-                            taxa_rank_list.append(cleaned_taxa_name) 
+            fetch_handle = Entrez.efetch(
+                db="Taxonomy",
+                retmode="xml",
+                webenv=webenv,
+                query_key=query_key
+            )
+            fetch_taxonomy_data = Entrez.read(fetch_handle)
+            fetch_handle.close()
 
-                    if not taxonomic_rank_exist: 
-                        taxa_rank_list.append("NA")
+            # 3. Guard against empty efetch responses
+            if not fetch_taxonomy_data or not isinstance(fetch_taxonomy_data, list):
+                return {'species_not_found': species}
 
-                # Removes space between Genus species to get Genus_species to be used in the header.
-                taxa_rank_list.append(scientific_name.replace(' ', '_'))
-                taxa_to_fasta = ";".join(taxa_rank_list)
+            tax_entry = fetch_taxonomy_data[0]
+            scientific_name = tax_entry.get("ScientificName", species)
+            LineageEx = tax_entry.get("LineageEx", [])
+            taxa_rank_list = []
 
-                taxid_entry = f"{species}; {taxid[0]}; {scientific_name}; {taxa_to_fasta}"
-                return {'filtered_species_collection': taxid_entry, 'species_found': species}
+            for taxonomic_rank in taxonomic_ranks:
+                taxonomic_rank_exist = False 
 
-            consecutive_fail_counter = 0
-            break
+                for item in LineageEx: 
+                    if item.get("Rank") == taxonomic_rank: 
+                        taxonomic_rank_exist = True 
+                        tax_name = item.get("ScientificName", "")
+                        cleaned_taxa_name = re.match(r'([^:;(\s]+)', tax_name)
+                        if cleaned_taxa_name:
+                            cleaned_taxa_name = cleaned_taxa_name.group(0).strip()
+                        else:
+                            cleaned_taxa_name = tax_name
+                            
+                        taxa_rank_list.append(cleaned_taxa_name) 
+                        break
+
+                if not taxonomic_rank_exist: 
+                    taxa_rank_list.append("NA")
+
+            # Format Genus_species for header
+            taxa_rank_list.append(scientific_name.replace(' ', '_'))
+            taxa_to_fasta = ";".join(taxa_rank_list)
+
+            taxid_entry = f"{species}; {current_taxid}; {scientific_name}; {taxa_to_fasta}"
+            return {'filtered_species_collection': taxid_entry, 'species_found': species}
 
         except HTTPError as error:
-            last_exception = error_occurrence(error, species, retry_delay)
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
             return {'failed_information_downloads': f"HTTPError: Failed to download info about {species} - {error}"}
+            
         except Exception as e:
-            last_exception = error_occurrence(e, species, retry_delay)
+            if attempt < max_retries - 1:
+                print(f"\nAn error occurred for {species}: {e}. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
             return {'failed_information_downloads': f"Exception: Failed to download info about {species} - {e}"}
-    else:
-        return {'failed_information_downloads': f"Max retries reached for {species}"}
+
+    return {'failed_information_downloads': f"Max retries reached for {species}"}
 
 
 def process_species_accession_number(specie, search_settings, max_search, batch_size, max_retries, sort_by_sequence_length, consecutive_fail_counter, log_file, failed_accession_downloads, type_of_download, run_name, create_directory, repeated_failures, error_occurrence, over_cap_csv_list):
@@ -460,13 +543,13 @@ def process_species_accession_number(specie, search_settings, max_search, batch_
     accession_file_1 = f"{species_directory}/{specie}_{run_name}_accession_numbers.txt"
     
     search = str(specie.replace("_", " ") + search_settings)
-    retry_delay = 10
-    repeated_failures(consecutive_fail_counter, log_file, failed_accession_downloads, type_of_download)
-
+    retry_delay = 5
+    
     for i in range(max_retries):
         try:
             accession_collection = []
             for start in range(0, max_search, batch_size):
+                ncbi_limiter.acquire()
                 search_handle = Entrez.esearch(
                     db="nucleotide",
                     term=search,
@@ -489,20 +572,20 @@ def process_species_accession_number(specie, search_settings, max_search, batch_
                 if count <= 10000:
                     break
 
-            consecutive_fail_counter = 0
-            break
+            break 
                 
-        except HTTPError as error:
-            last_exception = error_occurrence(error, specie, retry_delay)
-        except Exception as error:
-            last_exception = error_occurrence(error, specie, retry_delay)
+        except (HTTPError, Exception) as error:
+            last_exception = error
+            if i >= 1:
+                print(f"\033[33mAccession download issue for {specie.replace('_', ' ')}. Retrying in {retry_delay}s...\033[0m")
+            time.sleep(retry_delay)
+            retry_delay *= 2 
 
     else:
-        print(f"Unable to retrieve accession numbers for {specie}.")
+        print(f"\033[31mUnable to retrieve accession numbers for {specie.replace('_', ' ')} after {max_retries} attempts.\033[0m")
         log_entry = f"Error: Failed to download accession numbers for {specie} - {last_exception}"
         failed_accession_downloads.append(log_entry)
-        consecutive_fail_counter += 1
-    
+        
     with open(accession_file_1, "w") as file:
         for accession_batch in accession_collection:
             for accession_number in accession_batch:
@@ -517,6 +600,7 @@ def fetch_taxid(species, email, api_key):
     Implements exponential backoff for handling API rate limits (HTTP 429) 
     and server errors (HTTP 5xx).
     """
+    socket.setdefaulttimeout(30)  # Prevents indefinite hangs
     Entrez.email = email
     Entrez.api_key = api_key
     
@@ -525,6 +609,9 @@ def fetch_taxid(species, email, api_key):
     
     for attempt in range(max_retries):
         try:
+            # Enforce global thread pacing
+            ncbi_limiter.acquire()
+
             # Perform the NCBI Taxonomy database search
             handle = Entrez.esearch(db="Taxonomy", term=species.strip())
             record = Entrez.read(handle)
@@ -555,8 +642,11 @@ def fetch_taxid(species, email, api_key):
             return None
 
     return None
+
+
 def fetch_fasta_in_chunks(accession_list, batch_size=1000, log_file=None):
     """Downloads FASTA sequences in smaller sub-batches to prevent NCBI IncompleteRead timeouts."""
+    socket.setdefaulttimeout(30)  # Prevents indefinite hangs
     all_records = []
     
     for i in range(0, len(accession_list), batch_size):
@@ -565,6 +655,8 @@ def fetch_fasta_in_chunks(accession_list, batch_size=1000, log_file=None):
         
         for attempt in range(max_retries):
             try:
+                ncbi_limiter.acquire()
+
                 handle = Entrez.efetch(
                     db="nucleotide",
                     id=chunk,
@@ -593,7 +685,7 @@ def fetch_fasta_in_chunks(accession_list, batch_size=1000, log_file=None):
 
     return "".join(all_records)
     
-def download_species_data(species_list, email, api_key, length_threshold, max_length, retmax, custom_query, thread_number):
+def download_species_data(species_list, email, api_key, search_settings, length_threshold, max_length, retmax, custom_query, thread_number):
     """
     Concurrently downloads sequence data for a list of species from NCBI.
     
@@ -604,17 +696,14 @@ def download_species_data(species_list, email, api_key, length_threshold, max_le
     
     with open("preformated_sequences.fasta", "w") as file:
         with ThreadPoolExecutor(max_workers=thread_number) as executor:
-            futures = {}
-
-            # 1. Submit all download tasks to the thread pool
-            for species in species_list:
-                time.sleep(random.uniform(0.1, 0.4))  # Stagger requests to avoid API spikes
-                
-                future = executor.submit(
-                    fetch_species_data, species, email, api_key, length_threshold,
+            # Submit all tasks instantly without lagging the main thread
+            futures = {
+                executor.submit(
+                    fetch_species_data, species, email, api_key, search_settings, length_threshold,
                     max_length, retmax, custom_query
-                )
-                futures[future] = species
+                ): species 
+                for species in species_list
+            }
 
             # 2. Process results as they finish and update the progress bar
             with tqdm(total=len(species_list), desc="Downloading species data") as pbar:
@@ -627,28 +716,27 @@ def download_species_data(species_list, email, api_key, length_threshold, max_le
                         else:
                             list_of_not_found.append(species_name)
                     except Exception as e:
-                        # Catch unexpected thread failures and mark species as not found
-                        print(f"\n\033[33mError processing {species_name}: {e}\033[0m")
                         list_of_not_found.append(species_name)
                     
-                    # Update progress bar only after a task actually completes
                     pbar.update(1)
 
     return list_of_not_found
 
-def fetch_species_data(species, email, api_key, length_threshold, max_length, retmax, custom_query, retry_delay=10, max_retries=4):
+def fetch_species_data(species, email, api_key, search_settings, length_threshold, max_length, retmax, custom_query, retry_delay=10, max_retries=4):
     """
     Searches and fetches nucleotide FASTA sequences for a given species from NCBI.
     
     Uses NCBI's E-utilities (esearch and efetch) with history tracking.
     Implements exponential backoff for error handling to respect API limits.
     """
+    time.sleep(random.uniform(0.1, 0.4)) # Staggers threads organically
+    socket.setdefaulttimeout(30)  # Prevents indefinite hangs
     Entrez.email = email
     Entrez.api_key = api_key
     species_clean = species.strip()
     
     # Construct the highly specific eSearch term
-    search_term = f'{species_clean}[Organism] AND ("{length_threshold}"[SLEN] : "{max_length}"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" {custom_query}'
+    search_term = f"{species_clean}[Organism] {search_settings}".strip()    
     
     for attempt in range(max_retries):
         try:
@@ -667,9 +755,15 @@ def fetch_species_data(species, email, api_key, length_threshold, max_length, re
             if int(search_record.get("Count", 0)) == 0:
                 return None
             
+            # Guard against missing WebEnv/QueryKey before indexing
+            if "WebEnv" not in search_record or "QueryKey" not in search_record:
+                return None
+
             # 2. Fetch the records using the WebEnv history tracking
             webenv = search_record["WebEnv"]
             query_key = search_record["QueryKey"]
+
+            ncbi_limiter.acquire()
 
             fetch_handle = Entrez.efetch(
                 db="nucleotide",
@@ -800,7 +894,7 @@ def process_file(aligned_file, length_threshold, longest_amplicon_size):
     return filtered_sequences, not_accepted_sequences
 
 def download_fasta_sequences(specie, run_name, taxid_collection, sequence_batch_size, max_retries, log_file, consecutive_fail_counter, failed_information_downloads, type_of_download):
-    """Download fasta sequences with adaptive batch size reduction after 1 re-attempt."""
+    """Download fasta sequences sequentially per species with local batch size reduction on failure."""
     header_lineage = None
     with open(taxid_collection, "r") as file:
         species_info = file.readlines()
@@ -821,38 +915,36 @@ def download_fasta_sequences(specie, run_name, taxid_collection, sequence_batch_
         print(f"\033[31mAccession numbers file not found for {specie.replace('_', ' ')}\033[0m")
         return
 
-    retry_delay = 10
-    repeated_failures(consecutive_fail_counter, log_file, failed_information_downloads, type_of_download)
-
+    retry_delay = 5
     current_batch_size = sequence_batch_size
+    last_exception = None
 
     for attempt in range(max_retries):
         try:
             with open(f"Species/{specie}/{specie}_new_seqs_{run_name}.fasta", "w") as file:
                 for i in range(0, len(new_accession_numbers), current_batch_size):
                     batch = new_accession_numbers[i:i + current_batch_size]
+                    ncbi_limiter.acquire()
                     with Entrez.efetch(db="nucleotide", idtype="acc", id=batch, rettype="fasta", retmode="text") as handle:
                         for seq_record in SeqIO.parse(handle, "fasta"):
                             seq_record.id = seq_record.id.replace(' ', '').replace('_','')
                             file.write(f">gb|{seq_record.id}|{header_lineage}\n{seq_record.seq}\n") 
-                    time.sleep(1) 
-            consecutive_fail_counter = 0
-            break
+                    time.sleep(0.5) 
+            break 
 
         except (HTTPError, Exception) as error:
-            # Check if this was the second failure (attempt >= 1) before halving
+            last_exception = error
             if attempt >= 1:
                 current_batch_size = max(250, current_batch_size // 2)
-                print(f"\033[33mRepeated download issue for {specie.replace('_', ' ')}. Reducing batch size to {current_batch_size}...\033[0m")
+                print(f"\033[33mDownload issue for {specie.replace('_', ' ')}. Reducing batch size locally to {current_batch_size}...\033[0m")
             else:
-                print(f"\033[33mDownload issue for {specie.replace('_', ' ')}. Retrying once more with same batch size ({current_batch_size})...\033[0m")
-                
-            last_exception = error_occurrence(error, specie, retry_delay)
+                print(f"\033[33mDownload issue for {specie.replace('_', ' ')}. Retrying with same batch size ({current_batch_size})...\033[0m")
             
+            time.sleep(retry_delay)
+            retry_delay *= 2 
     else:
         log_entry = f"Error: Failed to download information about {specie} - {last_exception}"
         failed_information_downloads.append(log_entry)
-        consecutive_fail_counter += 1
 
 def perform_blast_operations(new_accession_species, run_name, database_path, analysed, min_length, outfmt_string, evalue, reuse_sequences, log_file, specie):
     """Perform BLAST operations for each species in the list."""
@@ -891,7 +983,8 @@ def perform_blast_operations(new_accession_species, run_name, database_path, ana
         blastn_cline = NcbiblastnCommandline(
             query=file_to_blast,
             db=database_path,
-            out=blast_output, 
+            out=blast_output,
+            task="blastn", 
             max_target_seqs=100,
             evalue=evalue,
             word_size=11,
@@ -992,22 +1085,22 @@ def process_fasta_file(file_path, species_data, accessions_to_keep=None, log_fil
                 'counter': counter, 'header_without_counter': header_base
             }
 
-def filter_sequences(input_file, output_file, number_ambigious_nucleotides):
+def filter_sequences(input_file, output_file, number_ambigious_nucleotides, min_length, max_length):
     """Filters sequences by ambiguity threshold and length bounds."""
     with open(output_file, "w") as out_handle:
         for record in SeqIO.parse(input_file, "fasta"):
-            seq = str(record.seq)
+            seq = str(record.seq).upper()  # Uppercase ensures proper base matching
             seq_len = len(seq)
 
             # Check length constraints first
             if not (min_length <= seq_len <= max_length):
                 continue
 
-            if all(base in "ACGT" for base in seq):
+            # Count non-canonical bases (N, R, Y, S, W, K, M, B, D, H, V)
+            ambiguous_count = sum(1 for base in seq if base not in "ACGT")
+
+            if ambiguous_count <= number_ambigious_nucleotides:
                 out_handle.write(f">{record.id}\n{seq}\n")
-            else:
-                if sum(1 for b in seq if b not in "ACGT") <= number_ambigious_nucleotides:
-                    out_handle.write(f">{record.id}\n{seq}\n")
 
 def add_symbol_to_new_sequence(new_potential_sequences):
     """Adds '*' to headers of new sequences for tree visualization."""
@@ -1162,6 +1255,21 @@ def positions_to_check(mode, positions, aligned_primer, aligned_sequence, record
     record_result[count_mode] = number_of_mismatches
     record_result[mismatches_mode] = mismatch_details if mismatch_details else "NA"
 
+def read_sequences_to_keep(file_path):
+    to_keep = set()
+    if file_path and os.path.exists(file_path):
+        # Parses the aligned FASTA and grabs the accession numbers
+        for record in SeqIO.parse(file_path, "fasta"):
+            if '|' in record.id:
+                accession = record.id.split('|')[1]
+            elif '_' in record.id:
+                accession = record.id.split('_')[1]
+            else:
+                accession = record.id
+            to_keep.add(accession)
+    return to_keep
+
+
 def primer_alignment(mode, primer_sequence, sequence_to_align, record_result):
     """Align the primer with the sequence and check for mismatches."""
     aligner = PairwiseAligner()
@@ -1275,8 +1383,8 @@ def has_gap(mismatches):
                 return True
     return False
 
-def nucleotide_proportions_diagram(df, mode):
-    """Generates a stacked bar diagram showing nucleotide proportions."""
+def nucleotide_proportions_diagram(df, mode, output_dir="."):
+    """Generates a stacked bar diagram showing nucleotide proportions inside output_dir."""
     df = df.apply(pd.to_numeric, errors='coerce').fillna(0)
     df['Most_Common'] = df.idxmax(axis=1)
     plot_data = df.drop(columns='Most_Common')
@@ -1295,15 +1403,21 @@ def nucleotide_proportions_diagram(df, mode):
     plt.grid(True, axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout() 
 
-    file_name = "Forward_primer_nucleotide_proportions.png" if mode == 'forward_sequence' else "Reverse_primer_nucleotide_proportions.png"
-    plt.savefig(file_name)
-    plt.close(fig) # Free up memory
-
-def proportions_table(df, mode, padded_primer):
-    """Generates a CSV table of nucleotide frequencies."""
-    file_name = "Forward_primer_nucleotide_frequencies.csv" if mode == "forward_sequence" else "Reverse_primer_nucleotide_frequencies.csv"
+    # Fix: Join output_dir with file name
+    file_basename = "Forward_primer_nucleotide_proportions.png" if mode == 'forward_sequence' else "Reverse_primer_nucleotide_proportions.png"
+    output_path = os.path.join(output_dir, file_basename)
     
-    with open(file_name, 'w') as f:
+    plt.savefig(output_path)
+    plt.close(fig)  # Free up memory
+
+
+def proportions_table(df, mode, padded_primer, output_dir="."):
+    """Generates a CSV table of nucleotide frequencies inside output_dir."""
+    # Fix: Join output_dir with file name
+    file_basename = "Forward_primer_nucleotide_frequencies.csv" if mode == "forward_sequence" else "Reverse_primer_nucleotide_frequencies.csv"
+    output_path = os.path.join(output_dir, file_basename)
+    
+    with open(output_path, 'w') as f:
         # Write custom headers safely without file-seeking hacks
         headers = ['Consensus_sequence_5_to_3'] + list(df.columns)
         f.write(';'.join(str(h) for h in headers) + '\n')
@@ -1314,28 +1428,41 @@ def proportions_table(df, mode, padded_primer):
         # Append DataFrame (skipping its default header)
         df.to_csv(f, sep=";", header=False)
 
-def multiple_sequence_alignment(df, mode): 
-    """Generates sequence alignments using the linsi algorithm with MAFFT."""
+def multiple_sequence_alignment(df, mode, output_dir="."): 
+    """Generates sequence alignments using the linsi/auto algorithm with MAFFT."""
+    valid_records = 0
+    
     with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.fasta') as temp_input:
         for index, row in df.iterrows():
-            if row[mode] != "NA":
+            if row[mode] != "NA" and pd.notna(row[mode]):
                 temp_input.write(f">{row['species_name']}_{row['accession_number']}\n{row[mode]}\n")
+                valid_records += 1
         temp_input_path = temp_input.name
-    
-    file_name = "Forward_sequences_aligned.fasta" if mode == "forward_sequence" else "Reverse_sequences_aligned.fasta"
-    
+
+    # Guard: If no valid sequences exist for alignment, exit cleanly without crashing MAFFT
+    if valid_records == 0:
+        if os.path.exists(temp_input_path):
+            os.remove(temp_input_path)
+        return
+
+    # Prefix the target filename with output_dir
+    file_basename = "Forward_sequences_aligned.fasta" if mode == "forward_sequence" else "Reverse_sequences_aligned.fasta"
+    output_path = os.path.join(output_dir, file_basename)
+
     # Run MAFFT alignment
     mafft_cline = MafftCommandline(input=temp_input_path, auto=True)
     stdout, stderr = mafft_cline()
-    
-    with open(file_name, "w") as handle:
-        handle.write(stdout)
-        
-    os.remove(temp_input_path)
 
-def analyze_primer_frequencies(df, mode, primer): 
+    # Write output into designated output_dir
+    with open(output_path, "w") as handle:
+        handle.write(stdout)
+
+    if os.path.exists(temp_input_path):
+        os.remove(temp_input_path)
+
+def analyze_primer_frequencies(df, mode, primer,output_dir="."): 
     """Calculates nucleotide frequencies and generates reports. (Formerly omega_function)"""
-    multiple_sequence_alignment(df, mode) 
+    multiple_sequence_alignment(df, mode, output_dir) 
     
     # Filter out NA sequences
     sequences = [seq for seq in df[mode] if seq != "NA"]
@@ -1385,8 +1512,8 @@ def analyze_primer_frequencies(df, mode, primer):
     new_headers = [freq.most_common(1)[0][0] if freq else '-' for freq in frequencies]
     df_transposed.columns = new_headers
 
-    nucleotide_proportions_diagram(proportions_df, mode)
-    proportions_table(df_transposed, mode, padded_primer)
+    nucleotide_proportions_diagram(proportions_df, mode, output_dir)
+    proportions_table(df_transposed, mode, padded_primer, output_dir)
 
 
 # =============================================================================
@@ -1395,302 +1522,286 @@ def analyze_primer_frequencies(df, mode, primer):
 
 def run_template(args):
     """Executes the Reference Template logic."""
-    log_file, run_name = get_log_file_name()
-    program_start = time.time()
-    
-    log_start(log_file, "Template Creation")
-    
-    append_and_print_message(log_file, f"\nRunning template creation...\nCommand: {get_command_string()}\n")
-    
-    local_time_startime = time.localtime(program_start)
-    formatted_time_startime = time.strftime("%Y-%m-%d %H:%M:%S", local_time_startime)
+    # 1. Load saved credentials if defaults are passed
+    config = load_config()
+    if args.email == "email@email.com": 
+        args.email = config.get("email", args.email)
+    if args.api_key == "api_key": 
+        args.api_key = config.get("api_key", args.api_key)
 
+    # 2. Input File Check
     if args.input_file:
         input_file = os.path.basename(args.input_file)
     elif args.input_file_species:
         input_file = os.path.basename(args.input_file_species)
     else:
-        print("Error: Both ", input_file, " and ", input_file_species," are missing. Please provide at least.")
+        print("Error: Both input_file and input_file_species are missing. Please provide at least one.")
         sys.exit(1)
-        
+
+    # 3. Validation Check for Non-Complete Execution
+    if not args.Complete:
+        if not all([args.input_file, args.forward, args.reverse, args.email, args.api_key]):
+            print("An input file with a list of species along with the following are required:\n"
+                  "Forward primer (-f, --forward)\nReverse primer (-r, --reverse)\n"
+                  "Email address (-e, --email)\nAPI key (-a, --api_key)\n\n"
+                  "The flag to finish the database (-C, --Complete) requires no other inputs.\n")
+            sys.exit(1)
+        save_config(args.email, args.api_key, args.forward, args.reverse)
+
+    # 4. Set Entrez Credentials & Update Limiter (Supports custom --rate_limit flag)
+    Entrez.email = args.email
+    Entrez.api_key = args.api_key
+
+    if hasattr(args, 'rate_limit') and args.rate_limit is not None:
+        ncbi_limiter.update_rate(args.rate_limit)
+    elif args.api_key and args.api_key != "api_key":
+        ncbi_limiter.update_rate(7.0)
+    else:
+        ncbi_limiter.update_rate(2.5)
+
+    # 5. Logging and Timer Setup
+    log_file, run_name = get_log_file_name()
+    program_start = time.time()
+    
+    log_start(log_file, "Template Creation")
+    append_and_print_message(log_file, f"\nRunning template creation...\nCommand: {get_command_string()}\n")
+    
+    local_time_startime = time.localtime(program_start)
+    formatted_time_startime = time.strftime("%Y-%m-%d %H:%M:%S", local_time_startime)
+
+    # 6. Parse Working Variables (Accessible globally in the function scope)
     if args.subset_file:
         args.subset_file = os.path.abspath(args.subset_file)
 
     working_directory = "Reference_template_creation/"
     to_be_curated = "aligned_sequences_to_curate.fasta"
-    species_list_name = args.input_file
-    species_list_name_C = args.input_file_species
     thread_number = number_threads(args.threads)
     command_string = get_command_string()
     output_prefix = "temp_split_file"
-    forward_primer = args.forward.lower()
-    forward_primer = forward_primer.replace('i', 'n')
-    reverse_primer = reverse_complement(args.reverse).lower()
-    reverse_primer = reverse_primer.replace('i', 'n')
+    
+    forward_primer = args.forward.lower().replace('i', 'n') if args.forward else ""
+    reverse_primer = reverse_complement(args.reverse).lower().replace('i', 'n') if args.reverse else ""
 
+    input_file_path = os.path.abspath(args.input_file) if args.input_file else ""
+    
+    # Check if the input file is already cleaned to avoid 'unique_unique_'
+    base_input_name = os.path.basename(input_file_path)
+    if base_input_name.startswith("unique_"):
+        next_input_file = base_input_name
+    else:
+        next_input_file = f"unique_{base_input_name}"
+
+    custom_query = f"{args.query}" if args.query else " "
+    length_threshold = args.threshold
+    longest_amplicon_size = args.longest_amplicon_size
+    max_length = args.length
+    retmax = args.max
+    skip_download = args.provided_sequences
+
+    search_settings = (
+        f'AND ("{length_threshold}"[SLEN] : "{max_length}"[SLEN]) '
+        f'AND (biomol_genomic[PROP] OR biomol_mitochondrial[PROP]) '
+        f'NOT biomol_mrna[PROP] NOT biomol_transcripts[PROP] NOT wgs[PROP] NOT "unverified" {custom_query}'
+    )
+
+    # 7. Execution Branch based on --Complete (-C) flag
     if not args.Complete:
-        if not all ([args.input_file, args.forward, args.reverse, args.email, args.api_key]):
-            print("An input file with a list of species along with the following are required:\nForward primer (-f, --forward)\nReverse primer (-r, --reverse)\nEmail address (-e, --email)\nAPI key (-a, --api_key)\n\nThe flag to finish the database (-C, --Complete) requires no other inputs.\n")
-            sys.exit(1)
-        else:
-            input_file = os.path.abspath(args.input_file)
-            save_config(args.email, args.api_key, args.forward, args.reverse)
-            Entrez.email = args.email
-            Entrez.api_key = args.api_key
-            custom_query = f"{args.query}" if args.query else " "
-            length_threshold = args.threshold
-            longest_amplicon_size = args.longest_amplicon_size
-            max_length = args.length
-            retmax = args.max
-            skip_download = args.provided_sequences
+        next_input_file = f"unique_{os.path.basename(input_file_path)}"
+        try:
+            os.makedirs(working_directory, exist_ok=True)
+            os.chdir(working_directory)
 
-            try:
-                os.makedirs(working_directory, exist_ok=True)
-                os.chdir(working_directory)
+            append_and_print_message(log_file, f"\n\nThe command used to run the script was: python {command_string}\n")
+            print("#" * 78 + "\n")
 
-                append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n")
-                print(f"##############################################################################\n")
-
-                with open(log_file, "w") as file:
-                    file.write(
-                        "-----------------------------------------------------------------------------------------------------------------------------\n"
-                        "Thanks for using EchoPipe, an iterative pipeline to create, curate and evaluate your reference database for environmental DNA studies\n"
-                        "For more information see the GitHub repository: https://github.com/EivindStensrud/EchoPipe/tree/main\n\n"
-                        f"The command used to run the script was: python {command_string}\n \n"
-                        "Reference_template_creation was conducted with the following settings:\n"
-                        f"Initated at: {formatted_time_startime}\n"
-                        f"Input file: {args.input_file}\n"
-                        f"Forward primer: 5'-{args.forward}-3'\n"
-                        f"Reverse primer: 5'-{args.reverse}-3'\n"
-                        f"Minimum sequence length: {args.threshold}\n"
-                        f"Maximum sequence length: {args.length}\n"
-                        f"Maximum amplicon cutoff multiplier: {args.longest_amplicon_size}\n")
-                    if not skip_download:
-                        file.write(
-                            f"Email address: {args.email}\n"
-                            f"API key: {args.api_key}\n"
-                            f"The amount of sequences downloaded per species: {args.max}\n\n"
-                            f"Custom query: {args.query}\n"
-                            f'Search term: [Organism] AND ("{length_threshold}"[SLEN] : "{max_length}"[SLEN]) AND biomol_genomic[PROP] NOT "unverified" {args.query}\n')
-                
-                # Existing unique name handling
-                raw_names = set()
-                with open(input_file, "r") as file:
-                    for line in file:
-                        if line.strip():
-                            raw_names.add(line.strip())
-
-                # Define lists to track results
-                filtered_species_list = []
-                duplicates_found = []
-                seen_taxids = set()
-
-                with ThreadPoolExecutor(max_workers=thread_number) as executor:
-                    # Submit all tasks to the pool
-                    future_to_name = {
-                        executor.submit(fetch_taxid, name, args.email, args.api_key): name 
-                        for name in raw_names
-                    }
-                    
-                    time.sleep(random.uniform(0.1, 0.4)) 
-
-                    # Process results as they complete
-                    for future in tqdm(as_completed(future_to_name), total=len(raw_names), desc="Filtering TaxIDs"):
-                        name = future_to_name[future]
-                        try:
-                            taxid = future.result()
-                            
-                            if taxid:
-                                if taxid not in seen_taxids:
-                                    seen_taxids.add(taxid)
-                                    filtered_species_list.append(name)
-                                else:
-                                    msg = f"Skipping '{name}': Duplicate TaxID ({taxid}) already represented.\n"
-                                    append_and_print_message(log_file, msg)
-                                    duplicates_found.append(f"{name};{taxid}")
-                            else:
-                                msg = f"Warning: Could not resolve TaxID for '{name}'. Skipping.\n"
-                                append_and_print_message(log_file, msg)
-                                
-                        except Exception as exc:
-                            # Catch any unexpected errors from the thread itself
-                            msg = f"Generated an exception for '{name}': {exc}\n"
-                            append_and_print_message(log_file, msg)
-
-                # Save a dedicated file for duplicate records
-                if duplicates_found:
-                    dup_file_name = f"duplicate_taxid_entries.txt"
-                    dup_file_path =f"../{dup_file_name}"
-                    with open(dup_file_path, "w") as dup_file:
-                        dup_file.write("Species;TaxID\n")
-                        for entry in duplicates_found:
-                            dup_file.write(entry + "\n")
-                    print(f"Duplicate records saved to: {dup_file_name}")
-
-                base_name = os.path.basename(input_file)
-                clean_output_file = f"unique_{base_name}"
-                clean_output_file_path =f"../{clean_output_file}"
-                
-                with open(clean_output_file_path, "w") as file:
-                    for name in filtered_species_list:
-                        file.write(name + "\n")
-                        
-                print(f"\n\033[32mSuccess! Cleaned species list saved to: {clean_output_file}\033[0m")
-                print(f"Please use THIS file for the next step.\n")
-
-                species_for_template = filtered_species_list # Default = Use all
-
-                if args.subset_file:
-                    subset_names = set()
-                    if os.path.exists(args.subset_file):
-                        with open(args.subset_file, "r") as f:
-                            for line in f:
-                                if line.strip():
-                                    subset_names.add(line.strip())
-                        # Only use names that are in BOTH the subset file and our valid list
-                        species_for_template = [s for s in filtered_species_list if s in subset_names]
-                        print(f"\nSubset Mode: Using {len(species_for_template)} species from provided list for template.")
-                    else:
-                        print(f"\n\033[31mError: Subset file '{args.subset_file}' not found. Using full list.\033[0m")
-
-                elif args.random_subset is not None:
-                    # Check if requested number is valid
-                    if 0 < args.random_subset < len(filtered_species_list):
-                        species_for_template = random.sample(filtered_species_list, args.random_subset)
-                        print(f"\nSubset Mode: Randomly selected {len(species_for_template)} species for template creation.")
-                        
-                        # Save the random selection to a file
-                        base_name = os.path.basename(input_file).replace(".csv", "").replace(".txt", "")
-                        subset_filename = f"subset_{args.random_subset}_{base_name}.txt"
-                        subset_filename_path = f"../{subset_filename}"
-                        
-                        with open(subset_filename_path, "w") as f:
-                            for s in species_for_template:
-                                f.write(s + "\n")
-                        print(f"List of selected species saved to: {subset_filename}")
-                        
-                    else:
-                        print(f"\nSubset Mode: Requested number ({args.random_subset}) >= total species. Using full list.")
-
-                ncbi_output_file = "preformated_sequences.fasta"
-
-                # Use the SUBSET list for downloading
+            with open(log_file, "w") as file:
+                file.write(
+                    "-----------------------------------------------------------------------------------------------------------------------------\n"
+                    "Thanks for using EchoPipe, an iterative pipeline to create, curate and evaluate your reference database for environmental DNA studies\n"
+                    "For more information see the GitHub repository: https://github.com/EivindStensrud/EchoPipe/tree/main\n\n"
+                    f"The command used to run the script was: python {command_string}\n \n"
+                    "Reference_template_creation was conducted with the following settings:\n"
+                    f"Initated at: {formatted_time_startime}\n"
+                    f"Input file: {args.input_file}\n"
+                    f"Forward primer: 5'-{args.forward}-3'\n"
+                    f"Reverse primer: 5'-{args.reverse}-3'\n"
+                    f"Minimum sequence length: {args.threshold}\n"
+                    f"Maximum sequence length: {args.length}\n"
+                    f"Maximum amplicon cutoff multiplier: {args.longest_amplicon_size}\n"
+                )
                 if not skip_download:
-                    download_species_data(species_for_template, args.email, args.api_key, 
-                                          length_threshold, max_length, retmax, 
-                                          custom_query, thread_number)
-                mafft_input_file = input_file if skip_download else ncbi_output_file
-                min_batch_size = 45
-                max_batch_size = 55
-                records = list(SeqIO.parse(mafft_input_file, "fasta"))
-                total_records = len(records)
-                batch_sizes = calculate_batches(total_records, min_batch_size, max_batch_size)
-                num_batches = len(batch_sizes)
-
-                start_idx = 0
-                files_to_align = []
-                for i, batch_size in enumerate(batch_sizes):
-                    end_idx = start_idx + batch_size
-                    output_file = f"{output_prefix}_{i + 1}.fasta"
-                    output_file = os.path.abspath(output_file)
-                    files_to_align.append(output_file)
-                    with open(output_file, "w") as file:
-                        SeqIO.write(records[start_idx:end_idx], file, "fasta")
-                        file.write(f">Forward_primer\n{forward_primer}\n")
-                        file.write(f">Reverse_primer\n{reverse_primer}\n")
-                    start_idx = end_idx
-
-                # Maximum number of attempts
-                max_attempts_mafft = 5
-                attempt_mafft = 0
-                thread_number_mafft = thread_number
-
-                while attempt_mafft < max_attempts_mafft:
-                    try:
-                        # Attempt to run MAFFT in parallel
-                        not_accepted_sequences = run_mafft_parallel(
-                            files_to_align, 
-                            length_threshold, 
-                            longest_amplicon_size, 
-                            "filtered_aligned_sequences.fasta", 
-                            thread_number_mafft
-                        )
-                        
-                        # If successful, break out of the loop
-                        break
-
-                    except Exception as e:
-                        print(f"Attempt {attempt_mafft + 1} failed with thread number {thread_number_mafft}: {e}")
-                        
-                        # Reduce thread number if it has not reduced to 1 already
-                        if thread_number_mafft > 1:
-                            thread_number_mafft -= 1  # Decrease by two
-                            print(f"Reducing thread number to {thread_number_mafft} and will try again.")
-                        else:
-                            print("Minimum thread number reached. Cannot reduce further.")
-                            break  # Exit the loop if no more threads can be reduced
-
-                    attempt_mafft += 1  # Increment the attempt_mafft counter
-
-                if attempt_mafft == max_attempts_mafft:
-                    try:
-                        thread_one = int(1)
-                        not_accepted_sequences = run_mafft_parallel(
-                            files_to_align, 
-                            length_threshold, 
-                            longest_amplicon_size, 
-                            "filtered_aligned_sequences.fasta", 
-                            thread_one
-                        )
-                        print("Max attempts reached. MAFFT alignment failed, retries with half batch size.")
-                    except Exception as e:
-                        print("Max attempts reached. MAFFT alignment failed, failed the retry with half batch size.")
-                else:
-                    print("MAFFT alignment completed.")
-
-            
-                print("Running MAFFT on sequences within the marker region.")
-                with open(to_be_curated, "w") as file:
-                    mafft_cline = MafftCommandline(
-                        input="filtered_aligned_sequences.fasta",
-                        localpair=True,
-                        maxiterate=10,
-                        reorder=True,
-                        thread=int(thread_number)
+                    file.write(
+                        f"Email address: {args.email}\n"
+                        f"API key: {args.api_key}\n"
+                        f"The amount of sequences downloaded per species: {args.max}\n\n"
+                        f"Custom query: {args.query}\n"
+                        f'Search term: [Organism] {search_settings}\n'
                     )
-                    stdout, stderr = mafft_cline()
-                    file.write(stdout)
+            
+            # Existing unique name handling
+            raw_names = set()
+            with open(input_file_path, "r") as file:
+                for line in file:
+                    clean_line = line.strip()
+                    if clean_line and not clean_line.startswith("#"):
+                        raw_names.add(clean_line)
 
-                if not_accepted_sequences:
-                    with open("non_approved_sequences.txt", "w") as file:
-                        for line in not_accepted_sequences:
-                            file.writelines(line + "\n")
+            filtered_species_list = []
+            duplicates_found = []
+            taxid_to_species = {}
 
-
-            finally:
+            with ThreadPoolExecutor(max_workers=thread_number) as executor:
+                future_to_name = {
+                    executor.submit(fetch_taxid, name, args.email, args.api_key): name
+                    for name in raw_names
+                }
                 
-                os.chdir("..")
+                for future in tqdm(as_completed(future_to_name), total=len(raw_names), desc="Filtering TaxIDs"):
+                    name = future_to_name[future]
+                    try:
+                        taxid = future.result()
+                        if taxid:
+                            if taxid not in taxid_to_species:
+                                taxid_to_species[taxid] = name
+                                filtered_species_list.append(name)
+                            else:
+                                original_name = taxid_to_species[taxid]
+                                msg = f"Skipping '{name}': Duplicate TaxID ({taxid}) already represented by '{original_name}'.\n"
+                                append_and_print_message(log_file, msg)
+                                duplicates_found.append(f"{name};{taxid};{original_name}")
+                        else:
+                            msg = (f"Warning: Could not resolve TaxID for '{name}'. Skipping.\n"
+                                   f"  -> This usually means the species name is not recognized by the NCBI Taxonomy database.\n"
+                                   f"  -> Please check if a synonym or an updated scientific name is accepted instead. Skipping.\n")
+                            append_and_print_message(log_file, msg)
+                    except Exception as exc:
+                        msg = f"Generated an exception for '{name}': {exc}\n"
+                        append_and_print_message(log_file, msg)
 
-                print("\nA draft of the reference template database has been created.")
-                print(f"Make sure to review {working_directory}{to_be_curated} before finalizing it to a reference template database with -C (--Complete).")
-                print("reference_template.fasta has been created and is ready for use with Echopipe_database_creation.py.\n")
+            if duplicates_found:
+                with open("../duplicate_taxid_entries.txt", "w") as dup_file:
+                    dup_file.write("Species;TaxID;Original_Species\n")
+                    for entry in duplicates_found:
+                        dup_file.write(entry + "\n")
+                print("Duplicate records saved to: duplicate_taxid_entries.txt")
 
-                next_step_cmd = f"python echopipe.py template -C {args.input_file}"
+            clean_output_file = f"unique_{os.path.basename(input_file_path)}"
+            with open(f"../{clean_output_file}", "w") as file:
+                file.write("\n".join(filtered_species_list) + "\n")
+                
+            print(f"\n\033[32mSuccess! Cleaned species list saved to: {clean_output_file}\033[0m")
+            print(f"Please use THIS file for the next step.\n")
 
-                log_end(log_file, program_start, f"\033[32m{next_step_cmd}\033[0m")
+            species_for_template = filtered_species_list
+
+            if args.subset_file:
+                if os.path.exists(args.subset_file):
+                    with open(args.subset_file, "r") as f:
+                        subset_names = {line.strip() for line in f if line.strip()}
+                    species_for_template = [s for s in filtered_species_list if s in subset_names]
+                    print(f"\nSubset Mode: Using {len(species_for_template)} species from provided list for template.")
+                else:
+                    print(f"\n\033[31mError: Subset file '{args.subset_file}' not found. Using full list.\033[0m")
+            elif args.random_subset is not None:
+                if 0 < args.random_subset < len(filtered_species_list):
+                    species_for_template = random.sample(filtered_species_list, args.random_subset)
+                    print(f"\nSubset Mode: Randomly selected {len(species_for_template)} species for template creation.")
+                    base_name = os.path.basename(input_file_path).replace(".csv", "").replace(".txt", "")
+                    subset_filename = f"subset_{args.random_subset}_{base_name}.txt"
+                    with open(f"../{subset_filename}", "w") as f:
+                        f.write("\n".join(species_for_template) + "\n")
+                    print(f"List of selected species saved to: {subset_filename}")
+
+                    next_input_file = subset_filename
+                else:
+                    print(f"\nSubset Mode: Requested number ({args.random_subset}) >= total species. Using full list.")
+
+            ncbi_output_file = "preformated_sequences.fasta"
+            if not skip_download:
+                download_species_data(
+                    species_for_template, args.email, args.api_key, 
+                    search_settings, length_threshold, max_length, 
+                    retmax, custom_query, thread_number
+                )
+
+            mafft_input_file = input_file_path if skip_download else ncbi_output_file
+            records = list(SeqIO.parse(mafft_input_file, "fasta"))
+            batch_sizes = calculate_batches(len(records), 45, 55)
+
+            start_idx = 0
+            files_to_align = []
+            for i, batch_size in enumerate(batch_sizes):
+                end_idx = start_idx + batch_size
+                output_file = os.path.abspath(f"{output_prefix}_{i + 1}.fasta")
+                files_to_align.append(output_file)
+                with open(output_file, "w") as file:
+                    SeqIO.write(records[start_idx:end_idx], file, "fasta")
+                    file.write(f">Forward_primer\n{forward_primer}\n>Reverse_primer\n{reverse_primer}\n")
+                start_idx = end_idx
+
+            max_attempts_mafft = 5
+            attempt_mafft = 0
+            thread_number_mafft = thread_number
+            not_accepted_sequences = []
+
+            while attempt_mafft < max_attempts_mafft:
+                try:
+                    not_accepted_sequences = run_mafft_parallel(
+                        files_to_align, length_threshold, longest_amplicon_size, 
+                        "filtered_aligned_sequences.fasta", thread_number_mafft
+                    )
+                    break
+                except Exception as e:
+                    print(f"Attempt {attempt_mafft + 1} failed with thread number {thread_number_mafft}: {e}")
+                    if thread_number_mafft > 1:
+                        thread_number_mafft -= 1
+                        print(f"Reducing thread number to {thread_number_mafft} and will try again.")
+                    else:
+                        break
+                attempt_mafft += 1
+
+            if attempt_mafft == max_attempts_mafft:
+                try:
+                    not_accepted_sequences = run_mafft_parallel(
+                        files_to_align, length_threshold, longest_amplicon_size, 
+                        "filtered_aligned_sequences.fasta", 1
+                    )
+                    print("Max attempts reached. Retried with 1 thread.")
+                except Exception:
+                    print("Max attempts reached. Retry failed.")
+            else:
+                print("MAFFT alignment completed.")
+
+            print("Running MAFFT on sequences within the marker region.")
+            with open(to_be_curated, "w") as file:
+                mafft_cline = MafftCommandline(
+                    input="filtered_aligned_sequences.fasta",
+                    localpair=True, maxiterate=10, reorder=True, thread=int(thread_number)
+                )
+                stdout, _ = mafft_cline()
+                file.write(stdout)
+
+            if not_accepted_sequences:
+                with open("non_approved_sequences.txt", "w") as file:
+                    file.write("\n".join(not_accepted_sequences) + "\n")
+
+        finally:
+            os.chdir("..")
+            print("\nA draft of the reference template database has been created.")
+            print(f"Make sure to review {working_directory}{to_be_curated} before finalizing it to a reference template database with -C (--Complete).")
+            next_step_cmd = f"python echopipe.py template -C {next_input_file}"
+            log_end(log_file, program_start, f"\033[32m{next_step_cmd}\033[0m")
 
     else:
-
-        append_and_print_message(log_file,f"\n\nThe command used to run the script was: python {command_string}\n")
-        print(f"##############################################################################\n")
+        append_and_print_message(log_file, f"\n\nThe command used to run the script was: python {command_string}\n")
+        print("#" * 78 + "\n")
 
         with open("reference_template_database.fasta", "w") as file:
-            for record in SeqIO.parse(working_directory + to_be_curated, "fasta"):
-                if not "Forward_primer" in record.id and not "Reverse_primer" in record.id:
-                    file.write(f">{record.description}\n")
-                    file.write(f'{str(record.seq.replace("-", ""))}\n')
+            for record in SeqIO.parse(os.path.join(working_directory, to_be_curated), "fasta"):
+                if "Forward_primer" not in record.id and "Reverse_primer" not in record.id:
+                    file.write(f">{record.description}\n{str(record.seq).replace('-', '')}\n")
 
-        delete_temp_files = glob.glob(f"Reference_template_creation/{output_prefix}*")  # Finds all files starting with 'example'
+        delete_temp_files = glob.glob(f"Reference_template_creation/{output_prefix}*")
         for file in delete_temp_files:
             try:
                 os.remove(file)
@@ -1698,14 +1809,10 @@ def run_template(args):
                 pass
 
         if args.Complete:
-            next_step_cmd = f"python echopipe.py create {input_file} reference_template_database.fasta"
-
+            next_step_cmd = f"python echopipe.py create {next_input_file} reference_template_database.fasta"
             log_end(log_file, program_start, f"\033[32m{next_step_cmd}\033[0m")
-        
         else:
-            next_step_cmd = f"python echopipe.py template -C {input_file}"
-            
-            # Combine the tutorial text into the log_end message
+            next_step_cmd = f"python echopipe.py template -C {next_input_file}"
             msg = (
                 "First remove sequences arising from other gene regions; see tutorial: "
                 "https://github.com/EivindStensrud/EchoPipe/tree/main\n\n"
@@ -1714,18 +1821,15 @@ def run_template(args):
             )
             log_end(log_file, program_start, msg)
 
+
 def run_create(args):
     """Executes the Database Creation logic."""
-    log_file, run_name = get_log_file_name()
-    program_timer = time.time()
-    
-    log_start(log_file, "Database Creation")
-    
-    append_and_print_message(log_file, f"\nRunning database creation...\nCommand: {get_command_string()}\n")
 
     config = load_config()
-    if args.email == "email@email.com": args.email = config.get("email", args.email)
-    if args.api_key == "api_key": args.api_key = config.get("api_key", args.api_key)
+    if args.email == "email@email.com": 
+        args.email = config.get("email", args.email)
+    if args.api_key == "api_key": 
+        args.api_key = config.get("api_key", args.api_key)
 
     if not args.repeat:
         if args.email == "email@email.com" or args.api_key == "api_key" or not all([args.input_file, args.input_database]):
@@ -1733,37 +1837,65 @@ def run_create(args):
             print("ERROR: An input file with a list of species, input database, email address and API key are required.\n(Email address and API key are not needed when re-analyzing sequences with -R, --repeat).")
             sys.exit(1)
 
-    input_species = args.input_file
-    input_fasta = args.input_database
+    # 3. Apply Entrez Credentials & Configure Rate Limiter
     Entrez.email = args.email
     Entrez.api_key = args.api_key
+
+    if hasattr(args, 'rate_limit') and args.rate_limit is not None:
+        ncbi_limiter.update_rate(args.rate_limit)
+    elif args.api_key and args.api_key != "api_key":
+        ncbi_limiter.update_rate(7.0)
+    else:
+        ncbi_limiter.update_rate(2.5)
+
+    # 4. Single-pass Log and Counter Initialization
+    logs_dir = "Log_files/"
+    counter_file = os.path.join(logs_dir, "run_counters.txt")
+    DATE = datetime.today().strftime('%Y-%m-%d')
+    i = read_counter(counter_file, DATE)
+    update_counter(counter_file, DATE, i + 1)
+    
+    log_file, run_name = get_log_file_name(logs_dir)
+    program_timer = time.time()
+    
+    log_start(log_file, "Database Creation")
+    append_and_print_message(log_file, f"\nRunning database creation...\nCommand: {get_command_string()}\n")
+    print(f"Log file for this run: {os.path.relpath(log_file)}")
+
+    # 5. Extract Search Parameters
+    input_species = args.input_file
+    input_fasta = args.input_database
     sort_by_sequence_length = args.sort
     max_search = args.maxcount
     max_length_input = args.maxlength
     min_length = args.ampliconsize
-    max_length_search = f' AND ("{str(min_length)}"[SLEN] : "{str(max_length_input)}"[SLEN])'
-    mitochondria_on = ' AND mitochondrion[filter]' if args.mitochondria else ""
-    ribosomal_on = ' AND 12S' if args.ribosomal else ""
-    custom_query = f' {args.query}' if args.query else ""
+    max_length_search = f'AND ("{min_length}"[SLEN] : "{max_length_input}"[SLEN])'
+    mitochondria_on = 'AND mitochondrion[filter]' if args.mitochondria else ""
+    ribosomal_on = 'AND 12S' if args.ribosomal else ""
+
+    custom_query = args.query.strip() if args.query else ""
+    if custom_query and not custom_query.upper().startswith(("AND", "NOT", "OR")):
+        custom_query = f"AND {custom_query}"
+
     sequence_batch_size = args.batch_size
     use_old_taxid = args.taxid
     evalue = f"5e-{args.evalue}"
     reuse_sequences = args.repeat
-
-    logs_dir = "Log_files/"
     thread_number = number_threads(args.threads)
 
-    counter_file = os.path.join(logs_dir, "run_counters.txt")
-    DATE = datetime.today().strftime('%Y-%m-%d')
-    i = read_counter(counter_file, DATE)
-    update_counter(counter_file, DATE, i + 1 )
-    
-    log_file, run_name = get_log_file_name(logs_dir)
-    print(f"Log file for this run: {os.path.relpath(log_file)}")
-
     database_directory = "Template_databases/" + os.path.splitext(input_fasta)[0] 
-    search_settings = '[Organism] AND biomol_genomic[PROP]' + max_length_search + mitochondria_on + ribosomal_on + custom_query 
+    query_parts = [
+        'AND (biomol_genomic[PROP] OR biomol_mitochondrial[PROP])',
+        'NOT biomol_mrna[PROP]',
+        'NOT biomol_transcripts[PROP]',
+        'NOT wgs[PROP]',
+        max_length_search,
+        mitochondria_on,
+        ribosomal_on,
+        custom_query
+    ]
     
+    search_settings = " ".join(filter(None, query_parts))   
     base_dir = os.path.abspath(os.getcwd())
     taxid_collection = os.path.join(base_dir, "taxid_collection.txt") 
     logs_dir_abs = os.path.join(base_dir, logs_dir)
@@ -1917,19 +2049,19 @@ def run_create(args):
             f"Make sure to adjust parameters such as --maxcount and/or --sort by sequence length.\n\n")
 
         accession_collection = [] 
+        print(f"{type_of_download} took {loop_duration} seconds to finish.")
+
     else: 
         append_and_print_message(log_file,
             "Existing sequences are to be re-analysed.\n"
             "No accession numbers are downloaded.\n\n"
             "--------------------------------------------------------------------------\n\n\n")
 
-    print(f"{type_of_download} took {loop_duration} seconds to finish.")
-
     analysed = "analysed.accession_numbers" 
     new_accession_species = [] 
 
     if not reuse_sequences:
-        for species in species_list: 
+        for species in tqdm(species_list, desc="Downloading species sequences"): 
             accession_file_1 = f"Species/{species}/{species}_{run_name}_accession_numbers.txt" 
             accession_file_2 = f"Species/{species}/{species}_{analysed}.txt" 
             does_file_exist(accession_file_2) 
@@ -1989,14 +2121,15 @@ def run_create(args):
         loop_duration = round(time.time() - loop_timer, 2)
         loop_finished(failed_information_downloads, log_file, type_of_download, loop_duration)
 
+        print(f"{type_of_download} took {loop_duration} seconds to finish.\n"
+        "--------------------------------------------------------------------------\n\n")
+
     else: 
         append_and_print_message(log_file,
             "Existing sequences are to be re-analysed.\n"
             "No sequences are downloaded.\n\n"
             "--------------------------------------------------------------------------\n\n\n")
 
-    print(f"{type_of_download} took {loop_duration} seconds to finish.\n"
-        "--------------------------------------------------------------------------\n\n")
 
     loop_timer = time.time()
     type_of_download = "BLAST extraction"
@@ -2042,14 +2175,12 @@ def run_create(args):
 
         species_in_final_file = set()  
 
-        with open(result_file, "r") as file:
-            final_file_content = file.readlines()
-
-            for line in final_file_content:
-                if line.startswith('>'):  
-                    header = line.strip()
-                    species_name = header.split('|')[2].split(';')[-1].replace('_', ' ')
-                    species_in_final_file.add(species_name)
+        # Just iterate directly over the list in memory!
+        for line in all_species_new_results:
+            if line.startswith('>'):
+                header = line.strip()
+                species_name = header.split('|')[2].split(';')[-1].replace('_', ' ')
+                species_in_final_file.add(species_name)
 
         sorted_final_file = sorted(species_in_final_file)
 
@@ -2071,16 +2202,32 @@ def run_create(args):
                 for line in outfile:
                     infile.writelines(line)
     
-    next_cmd = f"python echopipe.py curate BLAST_results/{run_name}_to_curate.fasta"
-    
-    # print recommended next code line
-    recommendation_msg = (
-        "To help curate the database (you can optionally filter by sequence length using --min_length and --max_length), run the following code:\n"
-        f"\033[32m{next_cmd}\033[0m"
-    )
-    
-    log_end(log_file, program_timer, recommendation_msg)
+    # 1. Define variables for the current run
+    to_curate_file_path = f"BLAST_results/{run_name}_to_curate.fasta"
+    updated_db_name = f"Database_name_{run_name}.fasta"
 
+    # 2. Find the largest valid FASTA file to suggest merging with for curation (-o flag)
+    prev_db = get_previous_database_by_size(updated_db_name)
+
+    # 3. Build the base curate command
+    base_command = f"python echopipe.py curate {to_curate_file_path}"
+
+    # 4. Append the -o flag if a previous database was found
+    if prev_db:
+        final_command = f"{base_command} -o {prev_db}"
+        merge_notice = f"(Found previous database '{prev_db}', appended -o flag for merging during curation)"
+    else:
+        final_command = base_command
+        merge_notice = "(No previous database found. Proceeding with fresh curation.)"
+
+    # 5. Format the recommendation message
+    recommendation_msg = f"""Run the curation command below to align sequences and build trees:
+   {merge_notice}
+
+\033[32m{final_command}\033[0m
+    """
+
+    log_end(log_file, program_timer, recommendation_msg)
 
 def run_curate(args):
     """Executes the Database Curation logic (Alignments & Trees)."""
@@ -2101,6 +2248,25 @@ def run_curate(args):
     working_directory = os.path.join(database_curation_dir, run_name)
     os.makedirs(working_directory, exist_ok=True)
     
+    # Load primers from JSON config if not provided via command-line flags
+    forward_primer = getattr(args, 'forward_primer', None)
+    reverse_primer = getattr(args, 'reverse_primer', None)
+    
+    config_path = os.path.abspath("Log_files/config.json")
+
+    if (not forward_primer or not reverse_primer) and os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                if not forward_primer:
+                    forward_primer = config.get("forward")
+                if not reverse_primer:
+                    reverse_primer = config.get("reverse")
+        except Exception as e:
+            print(f"Notice: Could not load primer configuration from JSON: {e}")
+    
+    print(f"Forward Primer: {forward_primer}")
+    print(f"Reverse Primer: {reverse_primer}")
     # Files
     concatenated_file = os.path.join(working_directory, f"{run_name}_concatenated_file.fasta")
     maffted_file = os.path.join(working_directory, f"{run_name}_aligned.fasta")
@@ -2115,6 +2281,7 @@ def run_curate(args):
     # 5. Alignment Logic
     min_len = args.min_length
     max_len = args.max_length
+
     if mafft_online_alignment and os.path.exists(mafft_online_alignment):
         append_and_print_message(log_file, "Using provided MAFFT online alignment.\n")
         concatenated_file = mafft_online_alignment
@@ -2123,21 +2290,44 @@ def run_curate(args):
         filter_sequences(new_potential_sequences, temp_filtered_file, num_ns, min_len, max_len)        
         records_to_write = []
         
-        # 1. Parse new potential sequences, add '*', and clean forbidden characters from IDs
+        old_ids = set()
+        if os.path.exists(most_recent_database):
+            for record in SeqIO.parse(most_recent_database, "fasta"):
+                clean_old_id = record.id.split()[0].rstrip("*").replace('|', '_').replace(';', '_').replace(' ', '')
+                old_ids.add(clean_old_id)
+
+        # 1. Parse new potential sequences, add '*' if virgin database or novel sequence
         for record in SeqIO.parse(temp_filtered_file, "fasta"):
-            # Append '*' to mark new sequences for tree visualization
-            record.id = f"{record.id}*"
-            record.description = ""  # Clear description to avoid redundant text
-            record.id = record.id.replace('|', '_').replace(';', '_').replace(' ', '')
-            records_to_write.append(record)
+            clean_id = record.id.split()[0].rstrip("*").replace('|', '_').replace(';', '_').replace(' ', '')
             
+            # Enforce asterisk ONLY on new sequences
+            if not most_recent_database or clean_id not in old_ids:
+                record.id = f"{clean_id}*"
+            else:
+                record.id = clean_id
+            
+            record.description = ""  
+            records_to_write.append(record)
+
         # 2. Parse the old/existing database records if available
         if os.path.exists(most_recent_database):
             for record in SeqIO.parse(most_recent_database, "fasta"):
-                record.id = record.id.replace('|', '_').replace(';', '_').replace(' ', '')
+                # INTEGRATION HERE: Actively strip the '*' from legacy database entries
+                clean_old_id = record.id.split()[0].rstrip("*").replace('|', '_').replace(';', '_').replace(' ', '')
+                
+                record.id = clean_old_id
+                record.description = ""
                 records_to_write.append(record)
                 
-        # 3. Write out using SeqIO to guarantee perfect newline separation every time
+        # 3. Add primers so they align and appear in the single output file for Jalview
+        if forward_primer:
+            records_to_write.append(SeqRecord(Seq(forward_primer), id="Forward_Primer", description=""))
+        if reverse_primer:
+            # Reverse-complement the reverse primer so it matches the sense strand orientation
+            rev_primer_rc = str(Seq(reverse_primer).reverse_complement())
+            records_to_write.append(SeqRecord(Seq(rev_primer_rc), id="Reverse_Primer", description=""))
+            
+        # 4. Write out using SeqIO
         SeqIO.write(records_to_write, concatenated_file, "fasta")
 
         n = sum(1 for line in open(concatenated_file) if line.startswith(">"))
@@ -2150,6 +2340,8 @@ def run_curate(args):
         
         mafft_cline = MafftCommandline(**mafft_args)
         stdout, _ = mafft_cline()
+        
+        # Save the single primary alignment file containing the primers
         with open(maffted_file, "w") as f:
             f.write(stdout)
 
@@ -2160,12 +2352,21 @@ def run_curate(args):
             for seq, headers in dup_seqs.items():
                 f.write("\n".join(headers) + f"\n{seq}\n\n")
 
+    # Create a temporary alignment file without primers for FastTree and monophyly checks
+    temp_tree_file = os.path.join(working_directory, "temp_tree_alignment.fasta")
+    tree_records = [
+        record for record in SeqIO.parse(maffted_file, "fasta")
+        if "Forward_Primer" not in record.id and "Reverse_Primer" not in record.id
+    ]
+    SeqIO.write(tree_records, temp_tree_file, "fasta")
+    tree_n = len(tree_records)
+
     # FastTree
-    is_large = n >= 10000
+    is_large = tree_n >= 10000
     fasttree_kwargs = {
         "nt": True,
         "fastest": is_large,
-        "input": maffted_file,
+        "input": temp_tree_file,
         "out": tree_string
     }
     if is_large:
@@ -2174,8 +2375,12 @@ def run_curate(args):
     fasttree_cline = FastTreeCommandline(**fasttree_kwargs)
     stdout, stderr = fasttree_cline()
     
+    if os.path.exists(temp_tree_file):
+        os.remove(temp_tree_file)
+        
     if stderr:
         append_and_print_message(log_file, f"FastTree messages: {stderr.strip()}\n")
+
     # Monophyly Check
     tree = PhyloTree(tree_string)
     pattern = r'\.\d+_|[\d.]+'
@@ -2205,24 +2410,42 @@ def run_curate(args):
     if os.path.exists(temp_filtered_file): os.remove(temp_filtered_file)
     os.chdir(base_dir)
 
-    # 7. Final Recommendation
-    next_step = f"\033[32mpython echopipe.py complete -b BLAST_results/{run_name}_to_curate.fasta -c Database_curation/{run_name}/{run_name}_aligned.fasta -u Database_name_{run_name}.fasta\033[0m"
-    log_end(log_file, program_timer, next_step)
+    # 1. Define variables for the next step
+    to_curate_file_path = f"BLAST_results/{run_name}_to_curate.fasta"
+    aligned_file_path = f"Database_curation/{run_name}/{run_name}_aligned.fasta"
+    updated_db_name = f"Database_name_{run_name}.fasta"
 
-def read_sequences_to_keep(file_path):
-    to_keep = set()
-    if file_path and os.path.exists(file_path):
-        # Parses the aligned FASTA and grabs the accession numbers
-        for record in SeqIO.parse(file_path, "fasta"):
-            if '|' in record.id:
-                accession = record.id.split('|')[1]
-            elif '_' in record.id:
-                accession = record.id.split('_')[1]
-            else:
-                accession = record.id
-            to_keep.add(accession)
-    return to_keep
+    # 2. Check if a previous database exists (or was passed via args.old_database)
+    prev_db = args.old_database if args.old_database else get_previous_database_by_size(updated_db_name)
 
+    # 3. Build the base complete command
+    base_complete_cmd = f"python echopipe.py complete -b {to_curate_file_path} -c {aligned_file_path} -u {updated_db_name}"
+
+    # 4. Append -o if a previous database is present
+    if prev_db:
+        final_complete_cmd = f"{base_complete_cmd} -o {prev_db}"
+        merge_notice = f"(Will merge with previous database '{prev_db}')"
+    else:
+        final_complete_cmd = base_complete_cmd
+        merge_notice = "(Fresh build - no previous database merge required)"
+
+    # 5. Format the recommendation message
+    recommendation_msg = f"""
+--------------------------------------------------------------------------------
+Recommendation:
+--------------------------------------------------------------------------------
+Manual Curation Recommendation (Jalview):
+1. Open the alignment file in Jalview: {aligned_file_path}
+2. Inspect alignment quality and verify monophyletic grouping.
+3. Remove sequence outliers, mislabeled entries, or problematic terminal gaps.
+4. Save the curated sequences and finalize your database using the command below (Feel free to give your database a more suitable name):
+   {merge_notice}
+
+\033[32m{final_complete_cmd}\033[0m
+"""
+
+    # 6. Pass to logger (log_end handles printing cleanly)
+    log_end(log_file, program_timer, recommendation_msg)
 
 def run_complete(args):
     """Executes the Database Completion logic (Merging, Filtering, Trees & Stats)."""
@@ -2250,6 +2473,13 @@ def run_complete(args):
     species_data = defaultdict(lambda: {'sequences': {}})
     accessions_to_delete = read_sequences_to_remove(aligned_curated_file)
     accessions_to_keep = read_sequences_to_keep(aligned_curated_file) if aligned_curated_file else None
+
+    # Ensure primer sequences are automatically dropped if present in the curated file
+    if accessions_to_keep is not None:
+        if isinstance(accessions_to_keep, set):
+            accessions_to_keep = {acc for acc in accessions_to_keep if "Forward_Primer" not in acc and "Reverse_Primer" not in acc}
+        else:
+            accessions_to_keep = [acc for acc in accessions_to_keep if "Forward_Primer" not in acc and "Reverse_Primer" not in acc]
 
     if old_database:
         print(f"Loading old database: {os.path.basename(old_database)}")
@@ -2391,7 +2621,6 @@ def run_complete(args):
         except OSError as e:
             print(f"Notice: Could not move old database. {e}")
 
-    # 9. Final Recommendations
     # 9. Final Recommendations
     program_duration = round(time.time() - program_timer, 2)
     relative_path_database = os.path.relpath(updated_database, base_directory)
@@ -2680,48 +2909,41 @@ def run_evaluate(args):
         df_no_data = pd.DataFrame(filtered_records_no_data)
         df_combined = pd.concat([df_perfect, df_ok, df_bad, df_no_data], ignore_index=True)
         
-        df_perfect.to_csv(f"{database_name}_primer_result_perfect_entries.csv", sep=";", index=False)
-        df_ok.to_csv(f"{database_name}_primer_result_ok_entries.csv", sep=";", index=False)
-        df_bad.to_csv(f"{database_name}_primer_result_bad_entries.csv", sep=";", index=False)
-        df_no_data.to_csv(f"{database_name}_primer_result_no_data_entries.csv", sep=";", index=False)
-        df_combined.to_csv(f"{database_name}_primer_result_all_entries_info.csv", sep=";", index=False)
+        df_perfect.to_csv(os.path.join(evaluation_directory, f"{database_name}_primer_result_perfect_entries.csv"), sep=";", index=False)
+        df_ok.to_csv(os.path.join(evaluation_directory, f"{database_name}_primer_result_ok_entries.csv"), sep=";", index=False)
+        df_bad.to_csv(os.path.join(evaluation_directory, f"{database_name}_primer_result_bad_entries.csv"), sep=";", index=False)
+        df_no_data.to_csv(os.path.join(evaluation_directory, f"{database_name}_primer_result_no_data_entries.csv"), sep=";", index=False)
+        df_combined.to_csv(os.path.join(evaluation_directory, f"{database_name}_primer_result_all_entries_info.csv"), sep=";", index=False)
 
 
     if forward_primer:
-        analyze_primer_frequencies(df_combined, "forward_sequence", forward_primer)
+        analyze_primer_frequencies(df_combined, "forward_sequence", forward_primer, output_dir=evaluation_directory)
     if reverse_primer:
-        analyze_primer_frequencies(df_combined, "reverse_sequence", reverse_primer)
+        analyze_primer_frequencies(df_combined, "reverse_sequence", reverse_primer, output_dir=evaluation_directory)
 
 
     os.chdir("../..")
 
     # 3. Finalize and Print Status
     current_working_directory = os.getcwd()
-    relative_path_database = os.path.relpath(evaluation_directory, current_working_directory)
+    relative_ref_db = os.path.basename(reference_database)
     
     # Terminal prints
-    print(f"\nThe reference database has successfully been evaluated!")
-    print(f"\nDataframes have been created and saved to: {evaluation_directory}")
-    
-    if args.forward_primer or args.reverse_primer:
-        print("Primer compatibility check has been performed. Please review the relevant files.")
+    recommendation_msg = f"""The reference database has successfully been evaluated!
+Dataframes have been created and saved to: Evaluation/{database_name}
 
-    relative_ref_db = os.path.relpath(reference_database)
+------------------------------------------------------------------------------
+Optional Downstream Reformatting:
+If you need to prepare this database for downstream taxonomic classifiers 
+(like SINTAX, QIIME 2, or DADA2), reformat the headers using:
 
-    # Suggestion for reformatting
-    print("\n------------------------------------------------------------------------------")
-    print("Suggestion:")
-    print("If you need to prepare this database for downstream taxonomic classifiers (like SINTAX, QIIME 2, or DADA2),")
-    print("you can optionally reformat the headers using the new reformat command:")
-    print(f"\033[32mpython echopipe.py reformat {relative_ref_db} <format>\033[0m")
-    print("Available formats: sintax, rdp, dadt, dads, idt, qiime")
-    print("------------------------------------------------------------------------------\n")
+\033[32mpython echopipe.py reformat {relative_ref_db} <format>\033[0m
 
-    # 4. Final Logging
-    next_step_msg = (f"Evaluation complete. Dataframes are located in: {evaluation_directory}\n"
-                     f"Optional reformatting suggestion provided for taxonomic classifiers.")
-    
-    log_end(log_file, program_timer, next_step_msg)
+Available formats: sintax, rdp, dadt, dads, idt, qiime
+------------------------------------------------------------------------------"""
+
+    # 5. Pass cleanly to the logger (log_end handles the timing and frame)
+    log_end(log_file, program_timer, recommendation_msg)
 
 def run_reformat(args):
     """Executes the Database Reformatting logic for taxonomy classifiers."""
@@ -2818,8 +3040,9 @@ def main():
     gen_args.add_argument('-p', '--provided_sequences', action='store_true', default='', help="Use a fasta file as reference template.")
     gen_args.add_argument('-z', '--longest_amplicon_size', type=float, default=2, help="Multiplier for median length.")
     gen_args.add_argument("-n", "--random_subset", type=int, help="Number of random species to use.")
-    gen_args.add_argument("-sf", "--subset_file", type=str, help="Path to a file containing a specific subset of species.")
+    gen_args.add_argument("-sf", "--subset_file", type=str, help="Path to a file containing a specific subset of species, typically taxonomic diverse group of the target taxa.")
     gen_args.add_argument('-T', '--threads', type=int, default=None, help="Number of parallel threads to use (default: auto-detected, max 7).")
+    gen_args.add_argument('--rate_limit', type=float, default=None, help="Max requests per second for NCBI API (default: 7.0 with API key, 2.5 without).")
     
     comp = parser_template.add_argument_group("Argument used to finish the curated reference template database.")
     comp.add_argument('-C', '--Complete', action="store_true", help="Completes the reference template database.")
@@ -2848,6 +3071,7 @@ def main():
     create_args.add_argument('-E', '--evalue', type=int, default=20, help="E-value for BLAST. Default = 20. Increase for longer markers; keep lower for shorter markers to avoid introducing non-target gene regions.")
     create_args.add_argument('-R', '--repeat', action='store_true', help="Repeat curation on previously downloaded sequences.")
     create_args.add_argument('-T', '--threads', type=int, default=None, help="Number of parallel threads to use (default: auto-detected, max 7).")
+    create_args.add_argument('--rate_limit', type=float, default=None, help="Max requests per second for NCBI API (default: 7.0 with API key, 2.5 without).")
 
     # 3. Curate Parser
     parser_curate = subparsers.add_parser("curate", 
@@ -2861,6 +3085,8 @@ def main():
     curate_args.add_argument('-M', '--mafft_online', type=str, default="", help="Path to MAFFT online alignment file.")
     curate_args.add_argument('--min_length', type=int, default=150, help="Minimum sequence length to keep.")
     curate_args.add_argument('--max_length', type=int, default=float('inf'), help="Maximum sequence length to keep.")
+    curate_args.add_argument("-f", "--forward-primer", help="Forward primer sequence")
+    curate_args.add_argument("-r", "--reverse-primer", help="Reverse primer sequence")
 
     # 4. Complete Parser 
     parser_complete = subparsers.add_parser("complete",
