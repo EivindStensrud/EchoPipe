@@ -15,7 +15,7 @@ authors = [
     { name = "Alexander Eiler" }
 ]
 dependencies = [
-    "biopython>=1.83",
+    "biopython<1.81",
     "pandas>=2.2.2",
     "numpy>=1.26.4",
     "matplotlib>=3.9.2",

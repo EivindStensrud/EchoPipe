@@ -347,7 +347,7 @@ def suggest_parallelism_fix(log_file=None):
         "  2. LOWER DOWNLOAD BATCH SIZE (-b / --batch_size):\n"
         "     Pass a smaller batch size (e.g., -b 1000 or -b 2000, default: 5000).\n\n"
         "Example Command:\n"
-        "  python echopipe.py create <species.txt> <template.fasta> -T 2 -b 1000\n"
+        "  echopipe create <species.txt> <template.fasta> -T 2 -b 1000\n"
         + "="*80 + "\n"
     )
     append_and_print_message(log_file, msg)
@@ -509,7 +509,7 @@ def process_species_taxonomy(species, filtered_species_collection, taxonomic_ran
                         break
 
                 if not taxonomic_rank_exist: 
-                    taxa_rank_list.append("NA")
+                    taxa_rank_list.append("Incertae sedis") # could be switched to "NA"
 
             # Format Genus_species for header
             taxa_rank_list.append(scientific_name.replace(' ', '_'))
@@ -1182,7 +1182,7 @@ def plot_histogram_sequence_per_species(species_counters, run_name):
     plt.savefig(f'{run_name}_histogram_sequences_per_species.png')
     plt.close()
 
-def plot_histogram_sequence_lenghts(updated_database, run_name):
+def plot_histogram_sequence_lengths(updated_database, run_name):
     """Plots sequence length distribution."""
     lengths = [len(r.seq) for r in SeqIO.parse(updated_database, "fasta")]
     plt.figure(figsize=(10, 6))
@@ -1461,7 +1461,7 @@ def multiple_sequence_alignment(df, mode, output_dir="."):
         os.remove(temp_input_path)
 
 def analyze_primer_frequencies(df, mode, primer,output_dir="."): 
-    """Calculates nucleotide frequencies and generates reports. (Formerly omega_function)"""
+    """Calculates nucleotide frequencies and generates reports."""
     multiple_sequence_alignment(df, mode, output_dir) 
     
     # Filter out NA sequences
@@ -1691,6 +1691,7 @@ def run_template(args):
                 
             print(f"\n\033[32mSuccess! Cleaned species list saved to: {clean_output_file}\033[0m")
             print(f"Please use THIS file for the next step.\n")
+            print(f"\033[36mContinuing with template creation... please wait.\033[0m\n")
 
             species_for_template = filtered_species_list
 
@@ -1783,13 +1784,14 @@ def run_template(args):
 
             if not_accepted_sequences:
                 with open("non_approved_sequences.txt", "w") as file:
+                    file.write("# Sequences removed for failing size criteria (too short or excessively long vs median):\n")
                     file.write("\n".join(not_accepted_sequences) + "\n")
 
         finally:
             os.chdir("..")
             print("\nA draft of the reference template database has been created.")
             print(f"Make sure to review {working_directory}{to_be_curated} before finalizing it to a reference template database with -C (--Complete).")
-            next_step_cmd = f"python echopipe.py template -C {next_input_file}"
+            next_step_cmd = f"echopipe template -C {next_input_file}"
             log_end(log_file, program_start, f"\033[32m{next_step_cmd}\033[0m")
 
     else:
@@ -1809,10 +1811,10 @@ def run_template(args):
                 pass
 
         if args.Complete:
-            next_step_cmd = f"python echopipe.py create {next_input_file} reference_template_database.fasta"
+            next_step_cmd = f"echopipe create {next_input_file} reference_template_database.fasta"
             log_end(log_file, program_start, f"\033[32m{next_step_cmd}\033[0m")
         else:
-            next_step_cmd = f"python echopipe.py template -C {next_input_file}"
+            next_step_cmd = f"echopipe template -C {next_input_file}"
             msg = (
                 "First remove sequences arising from other gene regions; see tutorial: "
                 "https://github.com/EivindStensrud/EchoPipe/tree/main\n\n"
@@ -1967,7 +1969,6 @@ def run_create(args):
 
         input_species_list = sorted([line.strip().split(";")[0] for line in input_species_list if line.strip()])
         input_species_list = sorted(list(set(input_species_list)))
-        print(f"Input_species_list: {input_species_list}")
 
         species_not_found = []
         duplicate_species = []
@@ -2210,7 +2211,7 @@ def run_create(args):
     prev_db = get_previous_database_by_size(updated_db_name)
 
     # 3. Build the base curate command
-    base_command = f"python echopipe.py curate {to_curate_file_path}"
+    base_command = f"echopipe curate {to_curate_file_path}"
 
     # 4. Append the -o flag if a previous database was found
     if prev_db:
@@ -2419,7 +2420,7 @@ def run_curate(args):
     prev_db = args.old_database if args.old_database else get_previous_database_by_size(updated_db_name)
 
     # 3. Build the base complete command
-    base_complete_cmd = f"python echopipe.py complete -b {to_curate_file_path} -c {aligned_file_path} -u {updated_db_name}"
+    base_complete_cmd = f"echopipe complete -b {to_curate_file_path} -c {aligned_file_path} -u {updated_db_name}"
 
     # 4. Append -o if a previous database is present
     if prev_db:
@@ -2511,7 +2512,7 @@ def run_complete(args):
     # Plotting
     species_counters = parse_fasta(updated_database)
     plot_histogram_sequence_per_species(species_counters, run_name)
-    plot_histogram_sequence_lenghts(updated_database, run_name)
+    plot_histogram_sequence_lengths(updated_database, run_name)
 
     # 4. Alignment Preparation
     temp_file = os.path.abspath("temporary_file.fasta")
@@ -2628,7 +2629,7 @@ def run_complete(args):
     eval_monophyly_path = f"Database_curation/{run_name}/Curated_content/{run_name}_post_curation_monophyletic_group.txt"
 
     # Define the command string for the log_end helper
-    next_cmd = (f"python echopipe.py evaluate {relative_path_database} {eval_monophyly_path} "
+    next_cmd = (f"echopipe evaluate {relative_path_database} {eval_monophyly_path} "
                 f"[-f <forward_primer> -r <reverse_primer>]")
 
     append_and_print_message(log_file,
@@ -2637,7 +2638,7 @@ def run_complete(args):
         f"The reference database {relative_path_database} has successfully been created!\n"
         "##############################################################################\n\n")
 
-    next_cmd = f"python echopipe.py evaluate {relative_path_database} {eval_monophyly_path}"
+    next_cmd = f"echopipe evaluate {relative_path_database} {eval_monophyly_path}"
     
     recommendation_msg = (
         "Conduct an additional evaluation of the database. See the tutorial for more instructions:\n"
@@ -2937,7 +2938,7 @@ Optional Downstream Reformatting:
 If you need to prepare this database for downstream taxonomic classifiers 
 (like SINTAX, QIIME 2, or DADA2), reformat the headers using:
 
-\033[32mpython echopipe.py reformat {relative_ref_db} <format>\033[0m
+\033[32mechopipe reformat {relative_ref_db} <format>\033[0m
 
 Available formats: sintax, rdp, dadt, dads, idt, qiime
 ------------------------------------------------------------------------------"""
@@ -3020,7 +3021,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="echopipe",
         description="EchoPipe: A complete pipeline for reference database creation and curation.",
-        epilog="Example usage: python echopipe.py create --help")
+        epilog="Example usage: echopipe create --help")
     
     subparsers = parser.add_subparsers(title="commands", dest="command", required=True)
 
