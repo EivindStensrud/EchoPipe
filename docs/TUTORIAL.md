@@ -25,17 +25,23 @@ By utilizing an iterative workflow, computational workload, memory, and runtime 
 1. Create and activate a virtual environment (example using conda):
 
 ```bash
-conda create -n echopipe python=3.11 -y
+conda create -n echopipe python=3.10 -y
 conda activate echopipe
 ```
 
-2. Install EchoPipe from GitHub via pip:
+2. Safely install the older Biopython version using conda-forge 
+(This prevents C-compiler errors on Macs and Windows)
+
+```bash
+conda install -c conda-forge "biopython<1.81" -y
+```
+3. Install EchoPipe from GitHub via pip:
 
 ```bash
 pip install git+https://github.com/EivindStensrud/EchoPipe.git
 ```
 
-3. Verify the installation:
+4. Verify the installation:
 
 ```bash
 echopipe --help
