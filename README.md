@@ -4,21 +4,21 @@ EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluati
 
 This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-Status: Stable — command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
+Status: Stable - command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
 
 ## Quickstart (recommended minimal steps)
 
 Prerequisites
 
-- Python 3.9+ (3.10 recommended)
-- Conda or a Python virtual environment
-- NCBI API key (recommended) and a contact email for Entrez
+-Python 3.11+
+-Conda or a Python virtual environment
+-NCBI API key (recommended) and a contact email for Entrez
 
 Install
 
 ```bash
 # create and activate a virtual environment (conda example)
-conda create -n echopipe python=3.10 -y
+conda create -n echopipe python=3.11 -y
 conda activate echopipe
 
 # install EchoPipe from GitHub
@@ -46,11 +46,13 @@ echopipe template species_list.csv \
 # 2) Inspect and curate the alignment generated under Reference_template_creation/
 # (open aligned_sequences_to_curate.fasta in an MSA viewer, remove bad sequences)
 
-# 3) Finalize the template
-echopipe template species_list.csv -e your.email@example.com -a YOUR_NCBI_API_KEY -C
+# 3) Finalize the template (Note: Use the "unique_" file generated in Step 1)
+echopipe template -C unique_species_list.csv
 
 # 4) Create the reference database (mines NCBI and extracts regions)
-echopipe create species_list.csv reference_template_database.fasta -e your.email@example.com -a YOUR_NCBI_API_KEY
+echopipe create unique_species_list.csv reference_template_database.fasta \
+  -e your.email@example.com \
+  -a YOUR_NCBI_API_KEY
 
 # 5) Curate extracted sequences
 echopipe curate BLAST_results/<date>_to_curate.fasta --min_length 200 --max_length 600 -N 0
@@ -65,7 +67,7 @@ echopipe evaluate MyDatabase.fasta \
   -r REVERSE_PRIMER
 
 # 8) Reformat for downstream classifiers (optional)
-echopipe reformat MyDatabase.fasta qiime
+echopipe reformat MyDatabase.fasta qiime  
 ```
 
 ---
@@ -76,12 +78,12 @@ echopipe reformat MyDatabase.fasta qiime
 
 Before using your reference database, run the **evaluate** step to:
 
-- ✓ Test taxonomic **monophyly** (are species forming coherent monophyletic groups?)
-- ✓ Check **primer binding sites** (do all sequences align with your forward/reverse primers?)
-- ✓ Assess **GC content** distribution across the database
-- ✓ Detect **identical sequences** across species (potential misannotations)
-- ✓ Resolve **NCBI taxonomy IDs** and verify accession annotations
-- ✓ Generate **diagnostic plots** and summary statistics
+- Test taxonomic **monophyly** (are species forming coherent monophyletic groups?)
+- Check **primer binding sites** (do all sequences align with your forward/reverse primers?)
+- Assess **GC content** distribution across the database
+- Detect **identical sequences** across species (potential misannotations)
+- Resolve **NCBI taxonomy IDs** and verify accession annotations
+- Generate **diagnostic plots** and summary statistics
 
 Example:
 
