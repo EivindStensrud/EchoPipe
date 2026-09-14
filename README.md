@@ -4,15 +4,15 @@ EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluati
 
 This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-Status: Stable - command-line tool tested with Python 3.10. See the full tutorial for options and troubleshooting.
+Status: Stable - command-line tool tested with Python 3.11+. See the full tutorial for options and troubleshooting.
 
 ## Quickstart (recommended minimal steps)
 
 Prerequisites
 
--Python 3.11+  
--Conda or a Python virtual environment  
--NCBI API key (recommended) and a contact email for Entrez  
+- Python 3.11+  
+- Conda or a Python virtual environment  
+- NCBI API key (recommended) and a contact email for Entrez  
 
 Install
 
@@ -27,6 +27,7 @@ pip install git+https://github.com/EivindStensrud/EchoPipe.git
 # check CLI
 echopipe --help
 ```
+If you have errors regarding installation, see the Installation Troubleshooting Guide at the end of the README file.  
 
 Prepare inputs
 
@@ -129,4 +130,66 @@ See `docs/TUTORIAL.md` for more details on supported formats.
 - **Troubleshooting & performance tips**: docs/TUTORIAL.md § Troubleshooting & performance tips
 - If you already have species and primer lists, substitute them into the quickstart commands above.
 
+## Installation Troubleshooting Guide:
+Error 1: "requires a different Python: 3.10.x not in '>=3.11'"
+The Problem:
+You will see this error if you are trying to install EchoPipe in an environment running Python 3.10 or older. EchoPipe requires Python 3.11 or higher to ensure compatibility with the underlying bioinformatics libraries (like Biopython).
+
+The Solution:
+You need to delete your current environment and create a new one explicitly asking for Python 3.11.
+
+Run these commands one by one:
+
+1. Deactivate your current environment:
+```bash
+conda deactivate
+```
+2. Delete the old environment (replace 'echopipe' with your environment name if different):
+
+```bash
+conda env remove -n echopipe -y
+```
+3. Create a brand new environment with Python 3.11:
+```bash
+conda create -n echopipe python=3.11 -y
+```
+4. Activate the new environment and install EchoPipe:
+
+```bash
+conda activate echopipe
+pip install git+https://github.com/EivindStensrud/EchoPipe.git
+```
+
+Error 2: SSL Errors or "Read timed out" during Conda creation
+The Problem:
+If you are on a strict university/corporate network, a VPN, or a poor internet connection (like a mobile hotspot), Conda might fail to download the required packages and throw an SSL record layer failure or a ReadTimeoutError.
+
+The Solution:
+Tell Conda to be more lenient with network timeouts and SSL checks temporarily:
+
+```bash
+# Increase the timeout limit
+conda config --set remote_read_timeout_secs 120
+
+# (Optional) Disable strict SSL verification if you are behind a firewall
+conda config --set ssl_verify false
+
+# Clean the corrupted cache and try again
+conda clean -i -y
+conda create -n echopipe python=3.11 -y
+```
+
+Error 3: "Command not found: echopipe" after successful installation
+The Problem:
+Pip successfully installed the tool, but your terminal doesn't recognize the echopipe command.
+
+The Solution:
+This usually means you forgot to activate your Conda environment before trying to run the tool. EchoPipe is only accessible inside the environment where it was installed.
+
+Always run this before starting your work:
+
+```bash
+conda activate echopipe
+echopipe --help
+```
 
