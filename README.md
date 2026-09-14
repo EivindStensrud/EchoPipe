@@ -131,7 +131,7 @@ See `docs/TUTORIAL.md` for more details on supported formats.
 - If you already have species and primer lists, substitute them into the quickstart commands above.
 
 ## Installation Troubleshooting Guide:
-Error 1: "requires a different Python: 3.10.x not in '>=3.11'"
+### Error 1: "requires a different Python: 3.10.x not in '>=3.11'"  
 The Problem:
 You will see this error if you are trying to install EchoPipe in an environment running Python 3.10 or older. EchoPipe requires Python 3.11 or higher to ensure compatibility with the underlying bioinformatics libraries (like Biopython).
 
@@ -160,7 +160,7 @@ conda activate echopipe
 pip install git+https://github.com/EivindStensrud/EchoPipe.git
 ```
 
-Error 2: SSL Errors or "Read timed out" during Conda creation
+### Error 2: SSL Errors or "Read timed out" during Conda creation
 The Problem:
 If you are on a strict university/corporate network, a VPN, or a poor internet connection (like a mobile hotspot), Conda might fail to download the required packages and throw an SSL record layer failure or a ReadTimeoutError.
 
@@ -179,7 +179,7 @@ conda clean -i -y
 conda create -n echopipe python=3.11 -y
 ```
 
-Error 3: "Command not found: echopipe" after successful installation
+### Error 3: "Command not found: echopipe" after successful installation
 The Problem:
 Pip successfully installed the tool, but your terminal doesn't recognize the echopipe command.
 
