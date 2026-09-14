@@ -31,13 +31,13 @@ Generate a template reference database.
 **Initial run:**
 ```
 bash
-python echopipe.py template species_list.csv -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -e email@email.com -a your_api_key
+echopipe template species_list.csv -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -e email@email.com -a your_api_key
 ```
 
 **Initial run, completion of template after manual curation:**
 ```  
 bash 
-python echopipe.py template -C unique_species_list.csv
+echopipe template -C unique_species_list.csv
 ```
 ---
 ## 2. `create`
@@ -68,7 +68,7 @@ Mine NCBI for reference sequences and creates a BLAST-ready database.
 
 ```
 bash 
-python echopipe.py create species_list.csv reference_template_database.fasta
+echopipe create unique_species_list.csv reference_template_database.fasta
 ```
 ---
 ## 3. `curate`
@@ -88,7 +88,7 @@ Align and generate trees for manual curation.
 
 ```
 bash 
-python echopipe.py curate BLAST_results/{date}_{run_number}_to_curate.fasta --min_length 150 and --max_length 250
+echopipe curate BLAST_results/<date>_to_curate.fasta --min_length 150 --max_length 250
 ```
 ---
 ## 4. `complete`
@@ -102,7 +102,7 @@ Filter, merge, and finalize the database.
 
 ```
 bash
-python echopipe.py complete -b BLAST_results/{date}_{run_number}_to_curate.fasta -c Database_curation/{date}_{run_number}/{date}_{run_number}_aligned.fasta -u Database_name_{date}_{run_number}.fasta
+echopipe complete -b BLAST_results/<date>_to_curate.fasta -c Database_curation/<date>/<date>_aligned.fasta -u Database_name_<date>.fasta
 ```
 ---
 ## 5. `evaluate`
@@ -117,7 +117,7 @@ Evaluate the database (GC content, primers).
 * **`-r, --reverse_primer`**: The reverse primer sequence to check (5'-3').
 ```
 bash
-python echopipe.py evaluate Database_name_{date}_{run_number}.fasta Database_curation/{date}_{run_number}/Curated_content/{date}_{run_number}_post_curation_monophyletic_group.txt
+echopipe evaluate Database_name_<date>.fasta Database_curation/<date>/Curated_content/<date>_post_curation_monophyletic_group.txt
 ```
 ---
 
@@ -133,7 +133,13 @@ Reformat database headers for popular taxonomic classifiers.
   * `dads` = DADA2 assignSpecies
   * `idt` = IDTAXA
   * `qiime` = QIIME 2
- 
+
+```
+bash
+echopipe reformat Database_name_<date>.fasta qiime
+```
+---
+
 ## 7. `updating the database`
 To update an existing reference database with newly available sequences from NCBI or to expand the sequence coverage, run the create command again.
 
@@ -142,5 +148,5 @@ If a species exceeded the previous download limit, you can run create with an in
 Example Usage (Updating with a higher count, a custom query and the old reference database as template)
 ```
 bash
-python echopipe.py create unique_species_list.csv Database_name_{date}_{run_number}.fasta -c 20000 --query "12s" -e email@email.com -a your_api_key
+echopipe create unique_species_list.csv Database_name_{date}_{run_number}.fasta -c 20000 --query "12s" -e email@email.com -a your_api_key
 ```
