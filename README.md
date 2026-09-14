@@ -10,9 +10,9 @@ Status: Stable - command-line tool tested with Python 3.10. See the full tutoria
 
 Prerequisites
 
--Python 3.11+
--Conda or a Python virtual environment
--NCBI API key (recommended) and a contact email for Entrez
+-Python 3.11+  
+-Conda or a Python virtual environment  
+-NCBI API key (recommended) and a contact email for Entrez  
 
 Install
 
