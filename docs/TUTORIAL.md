@@ -18,14 +18,14 @@ By utilizing an iterative workflow, computational workload, memory, and runtime 
 - **Species list** with scientific names (CSV or TXT).
 - **Email address** for NCBI Entrez contact.
 - **Forward and reverse primer sequences** spanning the target region (5'→3').
-- **Python 3.9+** (the tutorial and package were tested with Python 3.10).
+- **Python 3.11+** (the tutorial and package were tested with Python 3.10).
 
 ### Step-by-step installation
 
 1. Create and activate a virtual environment (example using conda):
 
 ```bash
-conda create -n echopipe python=3.10 -y
+conda create -n echopipe python=3.11 -y
 conda activate echopipe
 ```
 
