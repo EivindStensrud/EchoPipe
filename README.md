@@ -4,13 +4,13 @@ EchoPipe is an iterative, reproducible pipeline for creating, curating, evaluati
 
 This repository contains the EchoPipe CLI and examples. For a detailed walkthrough see the full user guide in docs/TUTORIAL.md.
 
-Status: Stable - command-line tool tested with Python 3.11+. See the full tutorial for options and troubleshooting.
+Status: Stable - command-line tool tested with Python 3.10+. See the full tutorial for options and troubleshooting.
 
 ## Quickstart (recommended minimal steps)
 
 Prerequisites
 
-- Python 3.11+  
+- Python 3.10+  
 - Conda or a Python virtual environment  
 - NCBI API key (recommended) and a contact email for Entrez  
 
@@ -18,8 +18,12 @@ Install
 
 ```bash
 # create and activate a virtual environment (conda example)
-conda create -n echopipe python=3.11 -y
+conda create -n echopipe python=3.10 -y
 conda activate echopipe
+
+# safely install the older Biopython version using conda-forge 
+# (This prevents C-compiler errors on Macs and Windows)
+conda install -c conda-forge "biopython<1.81" -y
 
 # install EchoPipe from GitHub
 pip install git+https://github.com/EivindStensrud/EchoPipe.git
