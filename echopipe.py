@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from io import StringIO
-from Bio.SeqUtils import gc_fraction
+from Bio.SeqUtils import GC
 import json
 import socket
 from Bio.Seq import Seq
@@ -2693,8 +2693,7 @@ def run_evaluate(args):
         lineage = record.id.split("|")[2].split(";")
         species, family = lineage[6], lineage[4]
         counter = int(record.id.split("|")[3])
-        gc_val = gc_fraction(record.seq) * 100
-
+        gc_val = GC(record.seq)
         species_gc_content[species].append(gc_val)
         family_gc_content[family].append(gc_val)
 
