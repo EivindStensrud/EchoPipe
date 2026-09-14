@@ -1,6 +1,7 @@
-# EchoPipe Manual
+# EchoPipe Manual  
 
 EchoPipe is a complete pipeline for reference database creation and curation. The script `echopipe.py` is divided into six main subcommands: `template`, `create`, `curate`, `complete`, `evaluate`, and `reformat`.
+This manual is made with MiFish primers (MiFish-U, Miya et al. 2015) and the Scandinavian fish species list. Feel free to recreate it with the species list under the folder Database -> ScandiFish -> species_list_scandinavia_fish_complete.txt.
 
 ---
 ## 1. `template`
@@ -31,7 +32,7 @@ Generate a template reference database.
 **Initial run:**
 ```
 bash
-echopipe template species_list.csv -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -e email@email.com -a your_api_key
+echopipe template species_list_scandinavia_fish_complete.txt -f GTCGGTAAAACTCGTGCCAGC -r CATAGTGGGGTATCTAATCCCAGTTTG -e email@email.com -a your_api_key
 ```
 
 **Initial run, completion of template after manual curation:**
