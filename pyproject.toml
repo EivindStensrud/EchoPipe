@@ -7,7 +7,7 @@ name = "echopipe"
 version = "1.0.0"
 description = "EchoPipe: A complete pipeline for reference database creation and curation in eDNA studies."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "BSD-3-Clause" }
 authors = [
     { name = "Eivind Stensrud", email = "eivind@ednasolutions.se" },
